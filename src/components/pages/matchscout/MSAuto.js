@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, MenuItem, Select, Stack, InputLabel, Box, FormControl, Collapse, Alert, IconButton } from "@mui/material";
+import { Slider, Button, MenuItem, Select, Stack, InputLabel, Box, FormControl, Collapse, Alert, IconButton, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { MatchStage, IntakeElement, IntakeLocations } from "../../MatchConstants";
 import LeaveButton from "./form_elements/LeaveButton";
@@ -39,63 +39,85 @@ export default function MSAuto({ data, handleStageChange }) {
         }
     };
 
+    const handleFuelChange = e => {
+        data.setFuel(MatchStage.AUTO, e.target.value); 
+        update();
+    }
+
+    const handleFuelClick = value => {
+        value += data.getFuel(MatchStage.AUTO); 
+        if (value <= 500 && value >= 0) {
+            data.setFuel(MatchStage.AUTO, value); 
+            update();
+        }
+    }
+
     const getDisplayValue = () => {
         if (deleteData !== null) {
             const selectedOuttake = data.get(MatchStage.AUTO, 'outtakeCounts')[deleteData];
             return `${selectedOuttake.intakeLocation} ${selectedOuttake.element} ${selectedOuttake.outtakeLocation}`;
         }
-        return "";
+        return "";  
     };
 
     return (
         <Stack direction={"column"} spacing={2}>
-            <LeaveButton
-                label={"Leave?"}
-                value={data.get(MatchStage.AUTO, "leave")}
-                onClick={(newValue) => {
-                    data.set(MatchStage.AUTO, "leave", newValue);
-                    update();
-                }}
-                showCheckbox={false}
-            />
-            {data.get(MatchStage.AUTO, 'outtakeCounts').length > 0 && (
-                <FormControl fullWidth>
-                    <InputLabel shrink={isFocused || deleteData !== null}>Previous Outtakes</InputLabel>
-                    <Select
-                        value={deleteData}
-                        onChange={(e) => setDeleteData(e.target.value)}
-                        displayEmpty
-                        renderValue={getDisplayValue}
-                        label={isFocused || deleteData !== null ? "Previous Outtakes" : ""}
-                        onFocus={() => setIsFocused(true)}
-                        onBlur={() => setIsFocused(false)}
-                    >
-                        {data.get(MatchStage.AUTO, 'outtakeCounts').map((data, idx) => (
-                            <MenuItem key={idx} value={idx}>
-                                {idx + 1 + ". " + data.intakeLocation + " " + data.element + " " + data.outtakeLocation}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            )}
-            {deleteData != null && (
-                <Button variant="outlined" color="error" sx={{ mt: 2 }} onClick={handleDelete} fullWidth>
-                    Delete Outtake
+            <Slider
+                value={data.getFuel(MatchStage.AUTO)}
+                onChange={handleFuelChange}
+                min={0}
+                max={500}
+            /> 
+            <Stack direction={"row"} spacing={2}>
+                <Button variant="outlined" onClick={() => handleFuelClick(1)} fullWidth> 
+                    Add 1 Fuel 
                 </Button>
-            )}
-            <Stack position="relative">
-                <MapSim
-                    selectedRow={selectedRow}
-                    setSelectedRow={setSelectedRow}
-                    selectedIntakeElement={selectedIntakeElement}
-                    setSelectedIntakeElement={setSelectedIntakeElement}
-                    selectedIntakeLocation={selectedIntakeLocation}
-                    setSelectedIntakeLocation={setSelectedIntakeLocation}
-                    update={update}
-                    stage={MatchStage.AUTO}
-                    data={data}
-                    handleStageChange={handleStageChange}
-                />
+                <Button variant="outlined" onClick={() => handleFuelClick(5)} fullWidth> 
+                    Add 5 Fuel 
+                </Button>
+                <Button variant="outlined" onClick={() => handleFuelClick(10)} fullWidth> 
+                    Add 10 Fuel 
+                </Button>
+            </Stack>
+            <Stack direction={"row"} spacing={2}>
+                <Button variant="outlined" color="error" onClick={() => handleFuelClick(-1)} fullWidth> 
+                    Remove 1 Fuel 
+                </Button>
+                <Button variant="outlined" color="error" onClick={() => handleFuelClick(-5)} fullWidth> 
+                    Remove 5 Fuel 
+                </Button>
+                <Button variant="outlined" color="error" onClick={() => handleFuelClick(-10)} fullWidth> 
+                    Remove 10 Fuel 
+                </Button>
+            </Stack>
+            <Typography>
+                Fuel Scored: {data.getFuel(MatchStage.AUTO)}
+            </Typography>
+          <Stack  direction="row" spacing={2}>
+            <Button
+                   variant="outlined"
+                   color="primary"
+                   fullWidth
+                   onClick={() => {
+                       handleStageChange(data.stage - 1);
+                       update();
+                   }}
+               >
+                   Previous
+               </Button>
+               <Button
+                   variant="outlined"
+                   color="primary"
+                   fullWidth
+                   onClick={() => {
+                       handleStageChange(data.stage + 1);
+                       update();
+                   }}
+               >
+                   Next
+               </Button>
+               </Stack>
+               <Stack position="relative">
                 <Collapse in={alert.open} sx={{ position: "absolute", top: 30, left: 0, right: 0, zIndex: 10 }}>
                     <Alert
                         action={
@@ -114,6 +136,6 @@ export default function MSAuto({ data, handleStageChange }) {
                     </Alert>
                 </Collapse>
             </Stack>
-        </Stack>
+            </Stack>
     );
 }

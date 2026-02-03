@@ -24,6 +24,7 @@ const defaultData = [
         autostage: MatchStage.AUTO,
         leave: true,
         outtakeCounts: [],
+        fuelScored: 0, 
     },
     {
         telestage: MatchStage.TELEOP,
@@ -76,6 +77,10 @@ export default class MatchScoutData {
         return this.data[stage][path];
     }
 
+    getFuel(stage) {
+        return this.data[stage]['fuelScored']; 
+    }
+
     addOuttakeEntry(stage, selectedIntakeElement, selectedIntakeLocation, timeElapsed, outtakeLocation) {
         const target = this.data[stage]["outtakeCounts"];
         target.push({
@@ -84,6 +89,10 @@ export default class MatchScoutData {
             outtakeLocation: outtakeLocation,
             cycleTime: timeElapsed/1000,
         });
+    }
+
+    setFuel(stage, value) {
+        this.data[stage]['fuelScored'] = value; 
     }
 
     setClimb(stage, value) {
