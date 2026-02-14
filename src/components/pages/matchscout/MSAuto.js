@@ -20,10 +20,7 @@ export default function MSAuto({ data, handleStageChange }) {
     const[time, setTime] = useState(0); 
     const[trackingBursts, setTrackingBursts] = useState(false); 
     
-    const [shootingTimes, setShootingTimes] = useState([]);
     const [timerMode, setTimerMode] = useState("toggle"); // "toggle" or "hold"
-    const [holdTime, setHoldTime] = useState(0);
-    const [lastHoldTime, setLastHoldTime] = useState(null);
 
     // Timer state for toggle mode
     const [elapsedTime, setElapsedTime] = useState(0);
@@ -75,9 +72,6 @@ export default function MSAuto({ data, handleStageChange }) {
         setHasStarted(false);
         setIsRunning(false);
         clearInterval(timerRef.current);
-        const finalTime = elapsedTime;
-        setShootingTimes([...shootingTimes, finalTime / 1000]);
-        setElapsedTime(0);
     };
 
     const pauseStopwatch = () => {
@@ -122,18 +116,19 @@ export default function MSAuto({ data, handleStageChange }) {
         if (hasStarted) {
             clearInterval(timerRef.current);
             const finalTime = elapsedTime;
-            setShootingTimes([...shootingTimes, finalTime / 1000]);
+            data.addShootingTimes(MatchStage.AUTO, finalTime / 1000);
             setHasStarted(false);
             setIsRunning(false);
             setElapsedTime(0);
+            update();
         }
     };
 
     // Handle time from hold timer
     const handleHoldTimeSubmit = (time) => {
         if (time > 0) {
-            setLastHoldTime(time);
-            setShootingTimes([...shootingTimes, time / 1000]);
+            data.addShootingTimes(MatchStage.AUTO, time / 1000);
+            update();
         }
     };
 
@@ -256,10 +251,10 @@ export default function MSAuto({ data, handleStageChange }) {
 
             {/* Shooting Times Display */}
             <Typography variant="h6">Shooting Times:</Typography>
-            {shootingTimes.length === 0 ? (
+            {data.getShootingTimes(MatchStage.AUTO).length === 0 ? (
                 <Typography color="textSecondary">No times recorded yet</Typography>
             ) : (
-                shootingTimes.map((time, index) => (
+                data.getShootingTimes(MatchStage.AUTO).map((time, index) => (
                     <Typography key={index}>
                         #{index + 1}: {time.toFixed(2)}s
                     </Typography>

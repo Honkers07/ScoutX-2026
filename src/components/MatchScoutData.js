@@ -25,13 +25,13 @@ const defaultData = [
         leave: true,
         outtakeCounts: [],
         fuelScored: [],
-        times: [],  
+        shootingTimes: [],  
     },
     {
         telestage: MatchStage.TELEOP,
         climb: climb[0], 
         fuelScored: [],
-        times: [],  
+        shootingTimes: [],  
     },
     {
         postmatchstage: MatchStage.POST_MATCH,
@@ -83,8 +83,8 @@ export default class MatchScoutData {
         return this.data[stage]['fuelScored']; 
     }
 
-    getTimes(stage) {
-        return this.data[stage]['times'];
+    getShootingTimes(stage) {
+        return this.data[stage]['shootingTimes']; 
     }
 
     addOuttakeEntry(stage, selectedIntakeElement, selectedIntakeLocation, timeElapsed, outtakeLocation) {
@@ -105,6 +105,17 @@ export default class MatchScoutData {
         const index = this.data[stage]['fuelScored'].length - 1; 
         this.data[stage]['fuelScored'][index] = value;
         console.log(this.data[stage]['fuelScored']); 
+    }
+
+    addShootingTimes(stage, value) {
+        this.data[stage]['shootingTimes'].push(value); 
+        console.log(this.data[stage]['shootingTimes']); 
+    }
+
+    setShootingTimes(stage, value) {
+        const index = this.data[stage]['shootingTimes'].length - 1; 
+        this.data[stage]['shootingTimes'][index] = value;
+        console.log(this.data[stage]['shootingTimes']); 
     }
 
     setClimb(stage, value) {
