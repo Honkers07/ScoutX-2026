@@ -17,6 +17,7 @@ export default function MSAuto({ data, handleStageChange }) {
     const [alert, setAlert] = useState({ open: false, severity: "info", message: "Remember to switch to Tele Page" });
     const [timer, setTimer] = useState(false); 
     const[time, setTime] = useState(0); 
+    const[trackingBursts, setTrackingBursts] = useState(false); 
 
     const stopWatch = Timer(); 
 
@@ -36,6 +37,13 @@ export default function MSAuto({ data, handleStageChange }) {
         setCounter(counter + 1);
     };
 
+    const handleBursts = () => {
+        if (!trackingBursts) {
+            data.addFuel(MatchStage.AUTO, 0); 
+        }
+        setTrackingBursts(!trackingBursts);
+    }
+
     const recordTime = () => {
         setTime(stopWatch.elapsedTime);
     }
@@ -48,13 +56,9 @@ export default function MSAuto({ data, handleStageChange }) {
         }
     };
 
-    const handleFuelChange = e => {
-        data.setFuel(MatchStage.AUTO, e.target.value); 
-        update();
-    }
-
     const handleFuelClick = value => {
-        value += data.getFuel(MatchStage.AUTO); 
+        const fuelScored = data.getFuel(MatchStage.AUTO); 
+        value += fuelScored[fuelScored.length - 1]; 
         if (value <= 500 && value >= 0) {
             data.setFuel(MatchStage.AUTO, value); 
             update();
@@ -63,8 +67,8 @@ export default function MSAuto({ data, handleStageChange }) {
 
     const getDisplayValue = () => {
         if (deleteData !== null) {
-            const selectedOuttake = data.get(MatchStage.AUTO, 'outtakeCounts')[deleteData];
-            return `${selectedOuttake.intakeLocation} ${selectedOuttake.element} ${selectedOuttake.outtakeLocation}`;
+            const selectedOuttake = data.getFuel(MatchStage.AUTO)[deleteData];
+            return `${selectedOuttake} FUEL SCORED`;
         }
         return "";  
     };
@@ -72,12 +76,12 @@ export default function MSAuto({ data, handleStageChange }) {
     return (
 
         <Stack direction={"column"} spacing={2}>
-            <Slider
-                value={data.getFuel(MatchStage.AUTO)}
-                onChange={handleFuelChange}
-                min={0}
-                max={500}
-            /> 
+            <Button variant="outlined" onClick={(() => handleBursts())}>
+                {trackingBursts ? 'End Burst' : 'Start Burst'}
+            </Button>
+            
+            {trackingBursts && (
+            <>
             <Stack direction={"row"} spacing={2}>
                 <Button variant="outlined" onClick={() => handleFuelClick(1)} fullWidth> 
                     Add 1 Fuel 
@@ -100,8 +104,9 @@ export default function MSAuto({ data, handleStageChange }) {
                     Remove 10 Fuel 
                 </Button>
             </Stack>
+            </>)}
             <Typography>
-                Fuel Scored: {data.getFuel(MatchStage.AUTO)}
+                Fuel Scored: {data.getFuel(MatchStage.AUTO)[data.getFuel(MatchStage.AUTO).length - 1]}
             </Typography>
             <Button variant="outlined" onClick={() => stopWatch.startStopwatch()} fullWidth>
                 Start Timer
