@@ -15,13 +15,15 @@ urllib.request.install_opener(urllib.request.build_opener(
     urllib.request.HTTPSHandler(context=ssl_context)
 ))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import cv2
 import numpy as np
 import os
 import tempfile
 import uuid
+import time
+import json
 from processors.frame_extractor import extract_frames_at_fps
 from processors.image_preprocessor import preprocess_for_ocr
 from processors.ocr_processor import extract_score, get_reader
@@ -29,6 +31,9 @@ from processors.score_analyzer import detect_score_changes
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})  # Enable CORS for React frontend
+
+# Store processing status (in production, use Redis or similar)
+processing_status = {}
 
 # Configure upload folder
 UPLOAD_FOLDER = tempfile.gettempdir()
@@ -67,6 +72,8 @@ def process_video():
     - cropWidth: width of crop region (pixels)
     - cropHeight: height of crop region (pixels)
     - alliance: 'red' or 'blue' (for logging/debugging)
+    
+    For progress updates, use the /api/process-video/stream endpoint instead.
     """
     try:
         # Check if video file is present
@@ -167,6 +174,129 @@ def process_video():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
+
+@app.route('/api/process-video-stream', methods=['POST'])
+def process_video_stream():
+    """
+    Process video with SSE for progress updates.
+    Yields progress events as the video is processed.
+    """
+    def generate():
+        try:
+            # Check if video file is present
+            if 'video' not in request.files:
+                yield f"data: {json.dumps({'error': 'No video file provided'})}\n\n"
+                return
+            
+            video_file = request.files['video']
+            
+            # Get crop coordinates
+            crop_x = int(request.form.get('cropX', 0))
+            crop_y = int(request.form.get('cropY', 0))
+            crop_width = int(request.form.get('cropWidth', 100))
+            crop_height = int(request.form.get('cropHeight', 100))
+            alliance = request.form.get('alliance', 'unknown')
+            
+            print(f"[API] Processing {alliance} video with crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
+            
+            # Save uploaded video to temp file
+            temp_video_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}.mp4")
+            video_file.save(temp_video_path)
+            
+            try:
+                # Get video info
+                cap = cv2.VideoCapture(temp_video_path)
+                video_fps = cap.get(cv2.CAP_PROP_FPS)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+                
+                video_duration = total_frames / video_fps if video_fps > 0 else 0
+                
+                print(f"[API] Video info: {total_frames} frames, {video_fps} fps, {video_duration:.1f}s duration")
+                
+                yield json.dumps({'status': 'starting', 'message': 'Starting video processing...'}) + '\n\n'
+                
+                # Step 1: Extract frames at 5fps
+                print("[API] Step 1: Extracting frames at 5fps...")
+                yield json.dumps({'status': 'extracting', 'message': 'Extracting frames...'}) + '\n\n'
+                
+                frames = extract_frames_at_fps(temp_video_path, fps=5)
+                
+                if not frames:
+                    yield json.dumps({'error': 'Could not extract frames from video'}) + '\n\n'
+                    return
+                
+                print(f"[API] ✓ Extracted {len(frames)} frames")
+                yield json.dumps({'status': 'extracted', 'frames': len(frames), 'message': f'Extracted {len(frames)} frames'}) + '\n\n'
+                
+                # Step 2: Crop and OCR
+                print("[API] Step 2: Cropping frames and running OCR...")
+                yield json.dumps({'status': 'processing', 'message': 'Processing frames with OCR...'}) + '\n\n'
+                
+                scores = []
+                ocr_results = []
+                total = len(frames)
+                
+                for i, (timestamp, frame) in enumerate(frames):
+                    # Send progress update every 5 frames
+                    if i % 5 == 0:
+                        progress = int((i / total) * 100)
+                        yield json.dumps({'status': 'processing', 'progress': progress, 'frame': i, 'total': total, 'message': f'Processing frame {i+1}/{total}'}) + '\n\n'
+                    
+                    # Crop
+                    h, w = frame.shape[:2]
+                    x1 = max(0, min(crop_x, w - 1))
+                    y1 = max(0, min(crop_y, h - 1))
+                    x2 = max(0, min(crop_x + crop_width, w))
+                    y2 = max(0, min(crop_y + crop_height, h))
+                    
+                    cropped = frame[y1:y2, x1:x2]
+                    if cropped.size == 0:
+                        continue
+                    
+                    # Preprocess and OCR
+                    processed = preprocess_for_ocr(cropped)
+                    score = extract_score(processed)
+                    
+                    ocr_results.append({'frame': i, 'timestamp': round(timestamp, 3), 'score': score})
+                    
+                    if score is not None:
+                        scores.append((timestamp, score))
+                
+                yield json.dumps({'status': 'ocr_complete', 'scores_found': len(scores), 'message': f'OCR found {len(scores)} scores'}) + '\n\n'
+                
+                print(f"[API] ✓ OCR found {len(scores)} scores from {len(frames)} frames")
+                
+                # Step 3: Analyze
+                print("[API] Step 3: Analyzing score changes...")
+                yield json.dumps({'status': 'analyzing', 'message': 'Analyzing score changes...'}) + '\n\n'
+                
+                score_timeline = detect_score_changes(scores)
+                total_score = score_timeline[-1]['score'] if score_timeline else 0
+                
+                print(f"[API] ✓ Timeline: {len(score_timeline)} changes, total: {total_score}")
+                
+                yield json.dumps({
+                    'status': 'complete',
+                    'success': True,
+                    'scoreTimeline': score_timeline,
+                    'totalScore': total_score,
+                    'framesProcessed': len(frames),
+                    'scoresRead': len(scores),
+                    'message': f'Processing complete! Found {len(scores)} scores'
+                }) + '\n\n'
+                
+            finally:
+                cleanup_files(temp_video_path)
+                
+        except Exception as e:
+            print(f"[API] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({'error': f'Processing failed: {str(e)}'}) + '\n\n'
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 
 @app.route('/health', methods=['GET'])

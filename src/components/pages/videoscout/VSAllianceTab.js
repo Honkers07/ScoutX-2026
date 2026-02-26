@@ -186,8 +186,16 @@ export default function VSAllianceTab(props) {
       // Send video + crop coordinates to backend for FFmpeg processing and OCR
       console.log('[VSAllianceTab] Sending video to backend for processing with crop:', crop);
       
-      setProcessingStatus("Uploading video to backend...");
+      setProcessingStatus("Processing video...");
       setError(null);
+      setProgress(0);
+      
+      let progressValue = 0;
+      const progressInterval = setInterval(() => {
+         progressValue = Math.min(progressValue + 2, 90);
+         setProgress(progressValue);
+         setProcessingStatus(`${progressValue}%`);
+      }, 500);
       
       try {
          // Create FormData to send video file and crop coordinates
@@ -199,61 +207,35 @@ export default function VSAllianceTab(props) {
          formData.append('cropHeight', crop.height);
          formData.append('alliance', alliance);
          
-         // Backend URL - change for production deployment
+         // Backend URL
          const backendUrl = 'http://localhost:5001/api/process-video';
          
-         // For progress updates, we'll use a simple fetch with timeout updates
-         // Since SSE requires a separate endpoint, we'll do a two-step approach:
-         // 1. Upload video first
-         // 2. Poll for progress
+         const response = await fetch(backendUrl, {
+            method: 'POST',
+            body: formData
+         });
          
-         setProcessingStatus("Processing video...");
-          setProgress(0);
+         clearInterval(progressInterval);
          
-         // Create an XMLHttpRequest to track upload progress
-         const xhr = new XMLHttpRequest();
+         if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+         }
          
-         // Track upload progress
-         xhr.upload.onprogress = (event) => {
-         xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-               // Upload complete, parse response
-               try {
-                  const result = JSON.parse(xhr.responseText);
-                  
-                  if (result.error) {
-                     throw new Error(result.error);
-                  }
-                  
-                  // For now, show the result - the backend will include progress in future
-                  setProcessingStatus(`Extracted ${result.scoresRead} scores from ${result.framesProcessed} frames`);
-                  setProgress(100);
-                  
-                  setScoreTimeline(result.scoreTimeline);
-                  setTotalScore(result.totalScore);
-                  handleSetStage(AllianceStage.COMPLETE);
-               } catch (e) {
-                  console.error('[VSAllianceTab] Parse error:', e);
-                  setError('Failed to parse response. Please try again.');
-                  handleSetStage(AllianceStage.CROP);
-               }
-            } else {
-               console.error('[VSAllianceTab] Upload error:', xhr.statusText);
-               setError(`Upload failed: ${xhr.statusText}`);
-               handleSetStage(AllianceStage.CROP);
-            }
-         };
+         const result = await response.json();
          
-         xhr.onerror = () => {
-            console.error('[VSAllianceTab] Network error');
-            setError('Network error. Please check the backend is running.');
-            handleSetStage(AllianceStage.CROP);
-         };
+         if (result.error) {
+            throw new Error(result.error);
+         }
          
-         xhr.open('POST', backendUrl);
-         xhr.send(formData);
+         setProcessingStatus(`Extracted ${result.scoresRead} scores from ${result.framesProcessed} frames`);
+         setProgress(100);
+         
+         setScoreTimeline(result.scoreTimeline);
+         setTotalScore(result.totalScore);
+         handleSetStage(AllianceStage.COMPLETE);
          
       } catch (err) {
+         clearInterval(progressInterval);
          console.error('[VSAllianceTab] Processing error:', err);
          setError('Video processing failed. Please try again.');
          handleSetStage(AllianceStage.CROP);
@@ -333,16 +315,11 @@ export default function VSAllianceTab(props) {
            <Typography variant="h6" sx={{ mb: 3, color: allianceColor }}>
                Processing {allianceLabel} Video
            </Typography>
-          
-          
-           <CircularProgress 
-                
-                
-               sx={{ color: allianceColor, mb: 2 }}
-            />
-            <Typography variant="h6" color="white">
+           
+           <CircularProgress variant="determinate" value={progress} size={80} sx={{ color: allianceColor, mb: 2 }} />
+           <Typography variant="h6" color="white">
                {processingStatus}
-            </Typography>
+           </Typography>
        </Box>
    );
 
