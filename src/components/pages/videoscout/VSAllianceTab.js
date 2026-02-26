@@ -17,21 +17,83 @@ const AllianceStage = {
 export default function VSAllianceTab(props) {
    const {
        alliance,
+       stage: stageProp,
+       setStage: setStageProp,
        scoreTimeline,
        setScoreTimeline,
        totalScore,
        setTotalScore,
        videoFile,
-       setVideoFile
+       setVideoFile,
+       videoPreview: videoPreviewProp,
+       setVideoPreview: setVideoPreviewProp,
+       dataRef
    } = props;
 
-
-   const [stage, setStage] = useState(AllianceStage.UPLOAD);
-   const [videoPreview, setVideoPreview] = useState(null);
+   // Use props for stage if provided, otherwise use local state
+   const [stage, setStageLocal] = useState(stageProp !== undefined ? stageProp : AllianceStage.UPLOAD);
+   const [videoPreview, setVideoPreview] = useState(videoPreviewProp || null);
    const [processingStatus, setProcessingStatus] = useState("");
+   const [progress, setProgress] = useState(0); // 0-100 for progress bar
    const [error, setError] = useState(null);
    const videoRef = useRef(null);
    const timeoutIdsRef = useRef([]);
+
+   // Sync videoPreview with parent when prop changes
+   useEffect(() => {
+       if (videoPreviewProp !== undefined) {
+           setVideoPreview(videoPreviewProp);
+       }
+   }, [videoPreviewProp]);
+
+   // Sync stage with parent prop
+   useEffect(() => {
+       if (stageProp !== undefined) {
+           setStageLocal(stageProp);
+       }
+   }, [stageProp]);
+
+   // Update parent when stage changes
+   const handleSetStage = (newStage) => {
+       setStageLocal(newStage);
+       if (setStageProp) {
+           setStageProp(newStage);
+       }
+   };
+
+   // Persist stage to sessionStorage for this alliance
+   const storageKey = `vsAllianceTab_${alliance}_stage`;
+   
+   useEffect(() => {
+       // Load stage from sessionStorage on mount
+       const savedStage = sessionStorage.getItem(storageKey);
+       if (savedStage !== null) {
+           const parsed = parseInt(savedStage, 10);
+           if (!isNaN(parsed)) {
+               handleSetStage(parsed);
+           }
+       }
+   }, []);
+
+   useEffect(() => {
+       // Save stage to sessionStorage when it changes
+       sessionStorage.setItem(storageKey, stage.toString());
+   }, [stage, storageKey]);
+
+   // Handle orientation change - prevent data loss
+   useEffect(() => {
+       const handleOrientationChange = () => {
+           console.log('[VSAllianceTab] Orientation changed for', alliance);
+       };
+       
+       window.addEventListener('orientationchange', handleOrientationChange);
+       window.addEventListener('resize', handleOrientationChange);
+       
+       return () => {
+           window.removeEventListener('orientationchange', handleOrientationChange);
+           window.removeEventListener('resize', handleOrientationChange);
+       };
+   }, [alliance]);
 
 
    const allianceColor = alliance === 'red' ? '#ef5350' : '#42a5f5';
@@ -90,7 +152,11 @@ export default function VSAllianceTab(props) {
            setVideoFile(file);
            const url = URL.createObjectURL(file);
            setVideoPreview(url);
-           setStage(AllianceStage.CROP);
+            // Also sync with parent if prop provided
+            if (setVideoPreviewProp) {
+                setVideoPreviewProp(url);
+            }
+           handleSetStage(AllianceStage.CROP);
            setError(null);
        } catch (err) {
            console.error('[VSAllianceTab] Error creating video preview:', err);
@@ -101,13 +167,13 @@ export default function VSAllianceTab(props) {
 
    const handleCropConfirm = (cropData) => {
        // For now, we'll use the original video until FFmpeg cropping is implemented
-       setStage(AllianceStage.PROCESSING);
+       handleSetStage(AllianceStage.PROCESSING);
        processVideo(videoFile, cropData);
    };
 
 
    const handleCropBack = () => {
-       setStage(AllianceStage.UPLOAD);
+       handleSetStage(AllianceStage.UPLOAD);
        if (videoPreview) {
            URL.revokeObjectURL(videoPreview);
        }
@@ -117,52 +183,86 @@ export default function VSAllianceTab(props) {
 
 
    const processVideo = async (video, crop) => {
-       // TODO: This is placeholder/mock processing code. Replace with actual backend API call.
-       // See plans/video-processing-pipeline.md for the intended implementation.
-       console.warn('[VSAllianceTab] Using mock video processing - replace with actual backend API');
+      // Send video + crop coordinates to backend for FFmpeg processing and OCR
+      console.log('[VSAllianceTab] Sending video to backend for processing with crop:', crop);
       
-       setProcessingStatus("Uploading video...");
-       setError(null);
+      setProcessingStatus("Uploading video to backend...");
+      setError(null);
       
-       try {
-           // Simulated processing for now - using tracked timeouts for cleanup
-           setTimeoutTracked(() => {
-               setProcessingStatus("Extracting frames at 5fps...");
-           }, 1000);
-
-
-           setTimeoutTracked(() => {
-               setProcessingStatus("Running OCR on frames...");
-           }, 2000);
-
-
-           setTimeoutTracked(() => {
-               // Simulated score timeline data
-               const mockTimeline = [
-                   { timestamp: 0.00, score: 0, increment: 0 },
-                   { timestamp: 5.20, score: 2, increment: 2 },
-                   { timestamp: 12.40, score: 5, increment: 3 },
-                   { timestamp: 18.60, score: 9, increment: 4 },
-                   { timestamp: 25.00, score: 12, increment: 3 },
-                   { timestamp: 32.80, score: 16, increment: 4 },
-                   { timestamp: 40.20, score: 20, increment: 4 },
-                   { timestamp: 48.60, score: 25, increment: 5 },
-               ];
-              
-               setScoreTimeline(mockTimeline);
-               setTotalScore(mockTimeline[mockTimeline.length - 1].score);
-               setStage(AllianceStage.COMPLETE);
-           }, 3000);
-       } catch (err) {
-           console.error('[VSAllianceTab] Processing error:', err);
-           setError('Video processing failed. Please try again.');
-           setStage(AllianceStage.CROP);
-       }
+      try {
+         // Create FormData to send video file and crop coordinates
+         const formData = new FormData();
+         formData.append('video', video);
+         formData.append('cropX', crop.x);
+         formData.append('cropY', crop.y);
+         formData.append('cropWidth', crop.width);
+         formData.append('cropHeight', crop.height);
+         formData.append('alliance', alliance);
+         
+         // Backend URL - change for production deployment
+         const backendUrl = 'http://localhost:5001/api/process-video';
+         
+         // For progress updates, we'll use a simple fetch with timeout updates
+         // Since SSE requires a separate endpoint, we'll do a two-step approach:
+         // 1. Upload video first
+         // 2. Poll for progress
+         
+         setProcessingStatus("Processing video...");
+          setProgress(0);
+         
+         // Create an XMLHttpRequest to track upload progress
+         const xhr = new XMLHttpRequest();
+         
+         // Track upload progress
+         xhr.upload.onprogress = (event) => {
+         xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+               // Upload complete, parse response
+               try {
+                  const result = JSON.parse(xhr.responseText);
+                  
+                  if (result.error) {
+                     throw new Error(result.error);
+                  }
+                  
+                  // For now, show the result - the backend will include progress in future
+                  setProcessingStatus(`Extracted ${result.scoresRead} scores from ${result.framesProcessed} frames`);
+                  setProgress(100);
+                  
+                  setScoreTimeline(result.scoreTimeline);
+                  setTotalScore(result.totalScore);
+                  handleSetStage(AllianceStage.COMPLETE);
+               } catch (e) {
+                  console.error('[VSAllianceTab] Parse error:', e);
+                  setError('Failed to parse response. Please try again.');
+                  handleSetStage(AllianceStage.CROP);
+               }
+            } else {
+               console.error('[VSAllianceTab] Upload error:', xhr.statusText);
+               setError(`Upload failed: ${xhr.statusText}`);
+               handleSetStage(AllianceStage.CROP);
+            }
+         };
+         
+         xhr.onerror = () => {
+            console.error('[VSAllianceTab] Network error');
+            setError('Network error. Please check the backend is running.');
+            handleSetStage(AllianceStage.CROP);
+         };
+         
+         xhr.open('POST', backendUrl);
+         xhr.send(formData);
+         
+      } catch (err) {
+         console.error('[VSAllianceTab] Processing error:', err);
+         setError('Video processing failed. Please try again.');
+         handleSetStage(AllianceStage.CROP);
+      }
    };
 
 
    const handleReset = () => {
-       setStage(AllianceStage.UPLOAD);
+       handleSetStage(AllianceStage.UPLOAD);
        if (videoPreview) {
            URL.revokeObjectURL(videoPreview);
        }
@@ -234,16 +334,15 @@ export default function VSAllianceTab(props) {
                Processing {allianceLabel} Video
            </Typography>
           
-           {/* Warning about mock processing */}
-           <Alert severity="warning" sx={{ mb: 3, textAlign: 'left' }} icon={<WarningIcon />}>
-               <AlertTitle>Simulated Processing</AlertTitle>
-               Video processing backend is not yet connected. Using simulated data for demonstration purposes only.
-           </Alert>
           
-           <CircularProgress sx={{ color: allianceColor, mb: 2 }} />
-           <Typography variant="body1" color="white">
+           <CircularProgress 
+                
+                
+               sx={{ color: allianceColor, mb: 2 }}
+            />
+            <Typography variant="h6" color="white">
                {processingStatus}
-           </Typography>
+            </Typography>
        </Box>
    );
 

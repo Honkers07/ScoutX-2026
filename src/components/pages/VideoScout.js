@@ -1,5 +1,5 @@
 import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Tabs, Tab, Paper } from "@mui/material";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import VideoScoutData from "../VideoScoutData";
 import CloseIcon from "@mui/icons-material/Close";
 import VSPrematch from "./videoscout/VSPrematch";
@@ -14,29 +14,182 @@ const VideoStage = {
    VIDEO_PROCESSING: 1,
 };
 
+// Storage key for persisting video scout data
+const STORAGE_KEY = 'videoScoutData';
+
+// Load persisted data from sessionStorage
+const loadPersistedData = () => {
+   try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+         return JSON.parse(saved);
+      }
+   } catch (e) {
+      console.error('[VideoScout] Error loading persisted data:', e);
+   }
+   return null;
+};
+
+// Save data to sessionStorage
+const savePersistedData = (data) => {
+   try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+   } catch (e) {
+      console.error('[VideoScout] Error saving persisted data:', e);
+   }
+};
+
+// Clear persisted data
+const clearPersistedData = () => {
+   try {
+      sessionStorage.removeItem(STORAGE_KEY);
+   } catch (e) {
+      console.error('[VideoScout] Error clearing persisted data:', e);
+   }
+};
+
 
 export default function VideoScout() {
    const [alert, setAlert] = useState({ open: false, message: "", severity: "success" });
    const [dataKey, setDataKey] = useState(0); // Used to force re-creation of VSPrematch
    const dataRef = useRef(new VideoScoutData(setAlert));
-  
+   
    const [stage, setStage] = useState(VideoStage.PRE_MATCH);
    const [currentTab, setCurrentTab] = useState(0); // 0 = Red, 1 = Blue
 
+   // Alliance tab stages - passed to children
+   const [redStage, setRedStage] = useState(0);
+   const [blueStage, setBlueStage] = useState(0);
 
-   // Red alliance state
+   // Load persisted data on mount
+   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+   
+   // Red alliance state - use refs for persistence across re-renders
+   const redDataRef = useRef({
+      scoreTimeline: [],
+      totalScore: 0,
+      videoFile: null,
+      videoPreview: null
+   });
    const [redScoreTimeline, setRedScoreTimeline] = useState([]);
    const [redTotalScore, setRedTotalScore] = useState(0);
    const [redVideoFile, setRedVideoFile] = useState(null);
+   const [redVideoPreview, setRedVideoPreview] = useState(null);
 
-
-   // Blue alliance state
+   // Blue alliance state - use refs for persistence
+   const blueDataRef = useRef({
+      scoreTimeline: [],
+      totalScore: 0,
+      videoFile: null,
+      videoPreview: null
+   });
    const [blueScoreTimeline, setBlueScoreTimeline] = useState([]);
    const [blueTotalScore, setBlueTotalScore] = useState(0);
    const [blueVideoFile, setBlueVideoFile] = useState(null);
-
+   const [blueVideoPreview, setBlueVideoPreview] = useState(null);
 
    const [isSubmitting, setIsSubmitting] = useState(false);
+
+   // Persist data to sessionStorage whenever it changes
+   useEffect(() => {
+      const dataToSave = {
+         stage,
+         currentTab,
+         redStage,
+         blueStage,
+         red: {
+            scoreTimeline: redDataRef.current.scoreTimeline,
+            totalScore: redDataRef.current.totalScore,
+         },
+         blue: {
+            scoreTimeline: blueDataRef.current.scoreTimeline,
+            totalScore: blueDataRef.current.totalScore,
+         }
+      };
+      savePersistedData(dataToSave);
+   }, [stage, currentTab, redScoreTimeline, redTotalScore, blueScoreTimeline, blueTotalScore, redStage, blueStage]);
+
+   // Load persisted data from sessionStorage on mount and on orientation change
+   const loadFromStorage = () => {
+      const saved = loadPersistedData();
+      if (saved) {
+         console.log('[VideoScout] Loading persisted data:', saved);
+         
+         if (saved.stage !== undefined) {
+            setStage(saved.stage);
+         }
+         if (saved.currentTab !== undefined) {
+            setCurrentTab(saved.currentTab);
+         }
+         if (saved.redStage !== undefined) {
+            setRedStage(saved.redStage);
+         }
+         if (saved.blueStage !== undefined) {
+            setBlueStage(saved.blueStage);
+         }
+         if (saved.red) {
+            redDataRef.current.scoreTimeline = saved.red.scoreTimeline || [];
+            redDataRef.current.totalScore = saved.red.totalScore || 0;
+            setRedScoreTimeline(redDataRef.current.scoreTimeline);
+            setRedTotalScore(redDataRef.current.totalScore);
+         }
+         if (saved.blue) {
+            blueDataRef.current.scoreTimeline = saved.blue.scoreTimeline || [];
+            blueDataRef.current.totalScore = saved.blue.totalScore || 0;
+            setBlueScoreTimeline(blueDataRef.current.scoreTimeline);
+            setBlueTotalScore(blueDataRef.current.totalScore);
+         }
+      }
+      setInitialDataLoaded(true);
+   };
+
+   // Load on mount
+   useEffect(() => {
+      loadFromStorage();
+   }, []);
+
+   // Handle orientation change - reload from sessionStorage to restore data
+   useEffect(() => {
+      const handleOrientationChange = () => {
+         console.log('[VideoScout] Orientation changed, reloading data...');
+         // Reload data from sessionStorage
+         const saved = loadPersistedData();
+         if (saved) {
+            if (saved.stage !== undefined) {
+               setStage(saved.stage);
+            }
+            if (saved.currentTab !== undefined) {
+               setCurrentTab(saved.currentTab);
+            }
+            if (saved.redStage !== undefined) {
+               setRedStage(saved.redStage);
+            }
+            if (saved.blueStage !== undefined) {
+               setBlueStage(saved.blueStage);
+            }
+            if (saved.red) {
+               redDataRef.current.scoreTimeline = saved.red.scoreTimeline || [];
+               redDataRef.current.totalScore = saved.red.totalScore || 0;
+               setRedScoreTimeline(redDataRef.current.scoreTimeline);
+               setRedTotalScore(redDataRef.current.totalScore);
+            }
+            if (saved.blue) {
+               blueDataRef.current.scoreTimeline = saved.blue.scoreTimeline || [];
+               blueDataRef.current.totalScore = saved.blue.totalScore || 0;
+               setBlueScoreTimeline(blueDataRef.current.scoreTimeline);
+               setBlueTotalScore(blueDataRef.current.totalScore);
+            }
+         }
+      };
+      
+      window.addEventListener('orientationchange', handleOrientationChange);
+      window.addEventListener('resize', handleOrientationChange);
+      
+      return () => {
+         window.removeEventListener('orientationchange', handleOrientationChange);
+         window.removeEventListener('resize', handleOrientationChange);
+      };
+   }, []);
 
 
    const handleStageChange = (newStage) => {
@@ -84,9 +237,13 @@ export default function VideoScout() {
            setRedScoreTimeline([]);
            setRedTotalScore(0);
            setRedVideoFile(null);
+            setRedVideoPreview(null);
+            redDataRef.current = { scoreTimeline: [], totalScore: 0, videoFile: null, videoPreview: null };
            setBlueScoreTimeline([]);
            setBlueTotalScore(0);
            setBlueVideoFile(null);
+            setBlueVideoPreview(null);
+            blueDataRef.current = { scoreTimeline: [], totalScore: 0, videoFile: null, videoPreview: null };
            setCurrentTab(0);
            setStage(VideoStage.PRE_MATCH);
            setAlert({ open: true, message: "Data submitted successfully!", severity: "success" });
@@ -191,6 +348,8 @@ export default function VideoScout() {
                            {currentTab === 0 && (
                                <VSAllianceTab
                                    alliance="red"
+                                   stage={redStage}
+                                   setStage={setRedStage}
                                    scoreTimeline={redScoreTimeline}
                                    setScoreTimeline={setRedScoreTimeline}
                                    totalScore={redTotalScore}
@@ -202,6 +361,8 @@ export default function VideoScout() {
                            {currentTab === 1 && (
                                <VSAllianceTab
                                    alliance="blue"
+                                   stage={blueStage}
+                                   setStage={setBlueStage}
                                    scoreTimeline={blueScoreTimeline}
                                    setScoreTimeline={setBlueScoreTimeline}
                                    totalScore={blueTotalScore}

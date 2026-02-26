@@ -5,19 +5,10 @@ import {
   Button,
   Slider,
   Paper,
-  ToggleButton,
-  ToggleButtonGroup,
 } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CropIcon from "@mui/icons-material/Crop";
-import LockIcon from "@mui/icons-material/Lock";
-import LockOpenIcon from "@mui/icons-material/LockOpen";
-
-// Aspect ratio for crop region (width:height)
-// 2:3 means width is 2/3 of height
-const ASPECT_RATIO_WIDTH = 2;
-const ASPECT_RATIO_HEIGHT = 3;
 
 export default function VSVideoCrop(props) {
   const { videoPreview, alliance, onConfirm, onBack } = props;
@@ -28,10 +19,9 @@ export default function VSVideoCrop(props) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Initial crop region with forced aspect ratio
+  // Initial crop region - flexible aspect ratio
   const initialWidth = 30;
-  const initialHeight =
-    (initialWidth * ASPECT_RATIO_HEIGHT) / ASPECT_RATIO_WIDTH;
+  const initialHeight = 15;
 
   const [cropRegion, setCropRegion] = useState({
     x: 35,
@@ -46,7 +36,6 @@ export default function VSVideoCrop(props) {
     height: 0,
   });
   const [canvasScale, setCanvasScale] = useState(1);
-  const [aspectRatioLocked, setAspectRatioLocked] = useState(true);
 
   const allianceColor = alliance === "red" ? "#ef5350" : "#42a5f5";
   const allianceLabel = alliance === "red" ? "Red Alliance" : "Blue Alliance";
@@ -179,21 +168,7 @@ export default function VSVideoCrop(props) {
     setIsDragging(false);
   };
 
-  // Handle size change with aspect ratio locked
-  const handleSizeChange = (event, newValue) => {
-    const newWidth = newValue;
-    const newHeight = (newWidth * ASPECT_RATIO_HEIGHT) / ASPECT_RATIO_WIDTH;
-
-    setCropRegion((prev) => ({
-      ...prev,
-      width: newWidth,
-      height: Math.min(newHeight, 100),
-      x: Math.min(prev.x, 100 - newWidth),
-      y: Math.min(prev.y, 100 - Math.min(newHeight, 100)),
-    }));
-  };
-
-  // Handle width change (aspect ratio unlocked)
+  // Handle width change
   const handleWidthChange = (event, newValue) => {
     setCropRegion((prev) => ({
       ...prev,
@@ -202,7 +177,7 @@ export default function VSVideoCrop(props) {
     }));
   };
 
-  // Handle height change (aspect ratio unlocked)
+  // Handle height change
   const handleHeightChange = (event, newValue) => {
     setCropRegion((prev) => ({
       ...prev,
@@ -210,29 +185,6 @@ export default function VSVideoCrop(props) {
       y: Math.min(prev.y, 100 - newValue),
     }));
   };
-
-  // Toggle aspect ratio lock
-  const handleAspectRatioToggle = () => {
-    setAspectRatioLocked((prev) => {
-      if (!prev) {
-        // When locking, adjust height to match aspect ratio
-        setCropRegion((crop) => ({
-          ...crop,
-          height: Math.min(
-            (crop.width * ASPECT_RATIO_HEIGHT) / ASPECT_RATIO_WIDTH,
-            100
-          ),
-        }));
-      }
-      return !prev;
-    });
-  };
-
-  // Calculate max width based on aspect ratio and video dimensions
-  // For a 2:3 aspect ratio, max width is limited by height
-  const maxWidthForAspectRatio = Math.floor(
-    (100 * ASPECT_RATIO_WIDTH) / ASPECT_RATIO_HEIGHT
-  );
 
   const handleConfirm = () => {
     // Validate video dimensions before calculating crop
@@ -301,105 +253,34 @@ export default function VSVideoCrop(props) {
         />
       </Paper>
 
-      {/* Aspect ratio toggle */}
-      <Box
-        sx={{
-          mt: 3,
-          px: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="body2" color="white">
-          Aspect Ratio:{" "}
-          {aspectRatioLocked
-            ? `${ASPECT_RATIO_WIDTH}:${ASPECT_RATIO_HEIGHT} (locked)`
-            : "Unlocked"}
-        </Typography>
-        <ToggleButtonGroup
-          value={aspectRatioLocked ? "locked" : "unlocked"}
-          exclusive
-          onChange={handleAspectRatioToggle}
-          size="small"
-        >
-          <ToggleButton
-            value="locked"
-            sx={{
-              color: aspectRatioLocked ? allianceColor : "white",
-              borderColor: allianceColor,
-              "&.Mui-selected": {
-                backgroundColor: `${allianceColor}20`,
-                color: allianceColor,
-              },
-            }}
-          >
-            <LockIcon sx={{ mr: 0.5 }} fontSize="small" />
-            Locked
-          </ToggleButton>
-          <ToggleButton
-            value="unlocked"
-            sx={{
-              color: !aspectRatioLocked ? allianceColor : "white",
-              borderColor: allianceColor,
-              "&.Mui-selected": {
-                backgroundColor: `${allianceColor}20`,
-                color: allianceColor,
-              },
-            }}
-          >
-            <LockOpenIcon sx={{ mr: 0.5 }} fontSize="small" />
-            Unlocked
-          </ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
-
-      {/* Size sliders - conditional based on aspect ratio lock */}
+      {/* Size sliders - width and height */}
       <Box sx={{ mt: 2, px: 1 }}>
-        {aspectRatioLocked ? (
-          <>
-            <Typography variant="body2" color="white" gutterBottom>
-              Crop Size: {cropRegion.width.toFixed(0)}% ×{" "}
-              {cropRegion.height.toFixed(0)}%
-            </Typography>
-            <Slider
-              value={cropRegion.width}
-              onChange={handleSizeChange}
-              min={5}
-              max={maxWidthForAspectRatio}
-              sx={{ color: allianceColor }}
-            />
-          </>
-        ) : (
-          <>
-            <Typography variant="body2" color="white" gutterBottom>
-              Width: {cropRegion.width.toFixed(0)}%
-            </Typography>
-            <Slider
-              value={cropRegion.width}
-              onChange={handleWidthChange}
-              min={1}
-              max={100}
-              sx={{ color: allianceColor }}
-            />
+        <Typography variant="body2" color="white" gutterBottom>
+          Width: {cropRegion.width.toFixed(0)}%
+        </Typography>
+        <Slider
+          value={cropRegion.width}
+          onChange={handleWidthChange}
+          min={1}
+          max={100}
+          sx={{ color: allianceColor }}
+        />
 
-            <Typography
-              variant="body2"
-              color="white"
-              gutterBottom
-              sx={{ mt: 2 }}
-            >
-              Height: {cropRegion.height.toFixed(0)}%
-            </Typography>
-            <Slider
-              value={cropRegion.height}
-              onChange={handleHeightChange}
-              min={1}
-              max={100}
-              sx={{ color: allianceColor }}
-            />
-          </>
-        )}
+        <Typography
+          variant="body2"
+          color="white"
+          gutterBottom
+          sx={{ mt: 2 }}
+        >
+          Height: {cropRegion.height.toFixed(0)}%
+        </Typography>
+        <Slider
+          value={cropRegion.height}
+          onChange={handleHeightChange}
+          min={1}
+          max={100}
+          sx={{ color: allianceColor }}
+        />
       </Box>
 
       {/* Crop info */}
