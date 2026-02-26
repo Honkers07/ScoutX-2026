@@ -19,15 +19,12 @@ export default function VSVideoCrop(props) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Initial crop region - flexible aspect ratio
-  const initialWidth = 30;
-  const initialHeight = 15;
-
+  // Initial crop region - full video by default
   const [cropRegion, setCropRegion] = useState({
-    x: 35,
-    y: 35,
-    width: initialWidth,
-    height: initialHeight,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });

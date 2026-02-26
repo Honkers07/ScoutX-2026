@@ -1,4 +1,4 @@
-import { Box, Typography, Stack, Button, CircularProgress, Alert, AlertTitle } from "@mui/material";
+import { Box, Typography, Stack, Button, LinearProgress, Alert, AlertTitle } from "@mui/material";
 import { useState, useRef, useEffect, useCallback } from "react";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -190,12 +190,7 @@ export default function VSAllianceTab(props) {
       setError(null);
       setProgress(0);
       
-      let progressValue = 0;
-      const progressInterval = setInterval(() => {
-         progressValue = Math.min(progressValue + 2, 90);
-         setProgress(progressValue);
-         setProcessingStatus(`${progressValue}%`);
-      }, 500);
+      let processingInterval = null;
       
       try {
          // Create FormData to send video file and crop coordinates
@@ -207,15 +202,28 @@ export default function VSAllianceTab(props) {
          formData.append('cropHeight', crop.height);
          formData.append('alliance', alliance);
          
-         // Backend URL
          const backendUrl = 'http://localhost:5001/api/process-video';
          
+         // Start progress: 1% per 0.6 seconds, max 99%
+         let progressValue = 0;
+         processingInterval = setInterval(() => {
+            if (progressValue < 99) {
+               progressValue += 1;
+               setProgress(progressValue);
+               setProcessingStatus(`${progressValue}%`);
+            }
+         }, 600);
+         
+         // Use fetch for simplicity
          const response = await fetch(backendUrl, {
             method: 'POST',
             body: formData
          });
          
-         clearInterval(progressInterval);
+         // Clear the progress interval
+         if (processingInterval) {
+            clearInterval(processingInterval);
+         }
          
          if (!response.ok) {
             throw new Error(`Upload failed: ${response.statusText}`);
@@ -235,7 +243,9 @@ export default function VSAllianceTab(props) {
          handleSetStage(AllianceStage.COMPLETE);
          
       } catch (err) {
-         clearInterval(progressInterval);
+         if (processingInterval) {
+            clearInterval(processingInterval);
+         }
          console.error('[VSAllianceTab] Processing error:', err);
          setError('Video processing failed. Please try again.');
          handleSetStage(AllianceStage.CROP);
@@ -316,7 +326,20 @@ export default function VSAllianceTab(props) {
                Processing {allianceLabel} Video
            </Typography>
            
-           <CircularProgress variant="determinate" value={progress} size={80} sx={{ color: allianceColor, mb: 2 }} />
+           <Box sx={{ width: '100%', mb: 2 }}>
+               <LinearProgress 
+                   variant="determinate" 
+                   value={progress} 
+                   sx={{ 
+                       height: 20, 
+                       borderRadius: 2,
+                       backgroundColor: 'rgba(255,255,255,0.2)',
+                       '& .MuiLinearProgress-bar': {
+                           backgroundColor: allianceColor,
+                       }
+                   }} 
+               />
+           </Box>
            <Typography variant="h6" color="white">
                {processingStatus}
            </Typography>
