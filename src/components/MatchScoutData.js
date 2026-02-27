@@ -4,10 +4,10 @@ import {doc, getFirestore, setDoc} from "firebase/firestore";
 import { Constants } from "../Constants";
 
 const climb = [
-    "Neither",
-    "Parked",
-    "Shallow",
-    "Deep",
+    "No Climb",
+    "L1",
+    "L2",
+    "L3",
 ]
 
 const defaultData = [
@@ -30,6 +30,7 @@ const defaultData = [
     {
         telestage: MatchStage.TELEOP,
         climb: climb[0], 
+        outtakeCounts: [],
         fuelScored: [],
         shootingTimes: [],  
     },
@@ -116,6 +117,21 @@ export default class MatchScoutData {
         const index = this.data[stage]['shootingTimes'].length - 1; 
         this.data[stage]['shootingTimes'][index] = value;
         console.log(this.data[stage]['shootingTimes']); 
+    }
+
+    deleteShootingTimes(stage, index) {
+        this.data[stage]['shootingTimes'].splice(index, 1);
+        console.log(this.data[stage]['shootingTimes']);
+    }
+
+    // Store shooting time ranges for Timer Page
+    setShootingTimeRanges(ranges) {
+        this.data[MatchStage.TELEOP]['shootingTimes'] = ranges;
+        console.log('Shooting time ranges set:', ranges);
+    }
+
+    getShootingTimeRanges() {
+        return this.data[MatchStage.TELEOP]['shootingTimes'];
     }
 
     setClimb(stage, value) {

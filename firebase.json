@@ -3,7 +3,7 @@
     "source": "functions"
   },
   "hosting": {
-    "public": "build",
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -18,8 +18,19 @@
   },
   "firestore": {
     "database": "(default)",
-    "location": "nam5",
+    "location": "us-west1",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "apphosting": {
+    "backendId": "scoutx-rebuilt",
+    "rootDir": ".",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "functions"
+    ]
   }
 }

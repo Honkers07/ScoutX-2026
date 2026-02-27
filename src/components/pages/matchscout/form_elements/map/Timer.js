@@ -88,11 +88,8 @@ export default function Timer({
   };
 
   const toggleTimerMode = () => {
-    // Reset timer when switching modes
-    setElapsedTime(0);
-    setIsRunning(false);
-    setHasStarted(false);
-    clearInterval(timerRef.current);
+    // Switch mode without resetting the timer
+    // Timer continues running if it was running
     setTimerMode(prev => prev === "toggle" ? "hold" : "toggle");
   };
 
