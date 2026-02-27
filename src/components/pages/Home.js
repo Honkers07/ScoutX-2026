@@ -103,7 +103,6 @@ export default function Home() {
                {renderScoutButton('/fuelscout', "Fuel Scout", isSmallScreen)}
                {renderScoutButton('/timer', "Shoot Times Scout", isSmallScreen)}
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
-               {renderScoutButton('/humanplayerscout', "Human Player", isSmallScreen)}
                {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
                {renderScoutButton('/credits', "Credits", isSmallScreen)}
 

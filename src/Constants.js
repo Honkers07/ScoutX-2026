@@ -1,11 +1,9 @@
 import Home from "./components/pages/Home";
 import Credits from "./components/pages/Credits";
-import PitScout from "./components/pages/PitScout";
 import VideoScout from "./components/pages/VideoScout";
 import Gambling from "./components/pages/Gambling";
 import Analytics from "./components/pages/DataVisualization/Analytics";
 import DataVisualizationDisplay from "./components/pages/DataVisualization/DataVisualizationDisplay"
-import HumanPlayerScout from "./components/pages/HumanPlayerScout";
 import TimerPage from "./components/pages/TimerPage";
 import FuelScout from "./components/pages/FuelScout";
 
@@ -20,19 +18,9 @@ export const Constants = {
             component: Home,
         },
         {
-            title: "Human Player Scout",
-            path: "/HumanPlayerScout", 
-            component: HumanPlayerScout,
-        },
-        {
             title: "Video Scout",
             path: "/videoScout",
             component: VideoScout,
-        },
-        {
-            title: "Pit Scout",
-            path: "/pitscout",
-            component: PitScout,
         },
         {
             title: "Data Visualization",

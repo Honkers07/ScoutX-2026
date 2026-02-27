@@ -2,7 +2,6 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Unstable_Grid2 as Grid2, TextField, Switch, FormControlLabel } from "@mui/material";
 import { MatchStage } from "../MatchConstants";
 import MatchScoutData from "../MatchScoutData";
-import Timer from "./matchscout/form_elements/map/Timer";
 import CloseIcon from "@mui/icons-material/Close";
 import Gambling from "./Gambling";
 import bgImage from "../../assets/backGround.png";
