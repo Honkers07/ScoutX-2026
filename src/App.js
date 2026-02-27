@@ -8,6 +8,7 @@ import Header from "./components/Header";
 import './firebase.js';
 
 export default function App() {
+
   return (
     <>
       <ThemeProvider theme={theme}>

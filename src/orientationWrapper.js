@@ -1,24 +1,35 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Typography } from '@mui/material';
 import { Constants } from './Constants';
 
 const OrientationWrapper = ({ children }) => {
   const [isPortrait, setIsPortrait] = useState(window.innerHeight > window.innerWidth);
 
-  const checkOrientation = () => {
+  const checkOrientation = useCallback(() => {
     setIsPortrait(window.innerHeight > window.innerWidth);
-  };
-
-  useEffect(() => {
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('load', checkOrientation);
-
-    return () => {
-      window.removeEventListener('resize', checkOrientation);
-      window.removeEventListener('load', checkOrientation);
-    };
   }, []);
 
+  useEffect(() => {
+    // Use resize event which fires on orientation change
+    const handleResize = () => {
+      // Delay to ensure accurate orientation detection
+      setTimeout(checkOrientation, 100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('load', checkOrientation);
+    
+    // Also check periodically in case resize doesn't fire
+    const interval = setInterval(checkOrientation, 500);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('load', checkOrientation);
+      clearInterval(interval);
+    };
+  }, [checkOrientation]);
+
+  // Memoize children to prevent re-creation on every render
   const memorizedChildren = useMemo(() => children, [children]);
 
   if (isPortrait) {
