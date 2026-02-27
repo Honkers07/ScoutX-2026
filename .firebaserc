@@ -1,11 +1,18 @@
 {
   "projects": {
-    "default": "scoutx-26e01"
+    "default": "scoutx-rebuilt"
   },
   "targets": {
     "scoutx-2025": {
       "hosting": {
         "targetName": "scoutx-2025"
+      }
+    },
+    "scoutx-rebuilt": {
+      "hosting": {
+        "scoutx-2026": [
+          "scoutx-rebuilt"
+        ]
       }
     }
   },

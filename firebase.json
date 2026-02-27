@@ -3,6 +3,7 @@
     "source": "functions"
   },
   "hosting": {
+    "site": "scoutx-2026",
     "public": "build",
     "ignore": [
       "firebase.json",
@@ -17,8 +18,6 @@
     ]
   },
   "firestore": {
-    "database": "(default)",
-    "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   }
