@@ -1,12 +1,17 @@
 # Flask and CORS
-flask>=2.3.0
-flask-cors>=4.0.0
+flask==3.0.0
+flask-cors==4.0.0
 
 # Computer Vision and OCR
-opencv-python>=4.8.0
-easyocr>=1.7.0
-certifi>=2023.0.0
+opencv-python==4.8.1.78
+easyocr==1.7.0
+certifi==2023.11.17
 
 # Image processing
-numpy>=1.24.0
-Pillow>=10.0.0
+numpy==1.26.2
+Pillow==10.1.0
+
+# EasyOCR dependencies (pre-install)
+pyclipper==1.3.0.post5
+shapely==2.0.2
+python-bidi==0.4.2
