@@ -99,7 +99,6 @@ export default function Home() {
                     top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
                     left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
                    mt: 4 }}>
-               {renderScoutButton('/pitscout', "Pit Scout", isSmallScreen)}
                {renderScoutButton('/fuelscout', "Fuel Scout", isSmallScreen)}
                {renderScoutButton('/timer', "Shoot Times Scout", isSmallScreen)}
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
