@@ -55,6 +55,8 @@ const defaultData = [
         eStopped: false, 
         knockedCage: false,
         failedClimb: false, 
+        trench: false,
+        shuttle: false,
     },
     {
         metadatastage: MatchStage.METADATA,

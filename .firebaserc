@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "scoutx-rebuilt"
+    "default": "scoutx-2026-rebuilt"
   },
   "targets": {
     "scoutx-2025": {

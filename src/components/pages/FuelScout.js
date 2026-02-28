@@ -5,6 +5,8 @@ import MatchScoutData from "../MatchScoutData";
 import CloseIcon from "@mui/icons-material/Close";
 import Gambling from "./Gambling";
 import bgImage from "../../assets/backGround.png";
+import firebase from "../../firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 // Custom Prematch component for Fuel Scout Page
 function FuelPrematch({ data }) {
@@ -175,6 +177,9 @@ function FuelPostmatch({ data }) {
                     { label: "Intake Broken", key: "intakeBroken" },
                     { label: "Outtake Broken", key: "outtakeBroken" },
                     { label: "Failed Climb", key: "failedClimb" },
+                    { label: "Trench", key: "trench" },
+                    { label: "Defense/Stealing", key: "defense" },
+                    { label: "Shuttle", key: "shuttle" },
                 ].map((item) => (
                     <Grid2 xs={6} sm={4} key={item.key}>
                         <Button
@@ -541,7 +546,57 @@ export default function FuelScout() {
                             <Button
                                 variant="contained"
                                 color="success"
-                                onClick={() => window.location.pathname = '/'}
+                                onClick={async () => {
+                                    const team = data.get(MatchStage.PRE_MATCH, "team");
+                                    const match = data.get(MatchStage.PRE_MATCH, "match");
+                                    const name = data.get(MatchStage.PRE_MATCH, "name");
+                                    const verificationCode = data.get(MatchStage.PRE_MATCH, "verificationCode");
+                                    const alliance = data.get(MatchStage.PRE_MATCH, "alliance");
+                                    const start_position = data.get(MatchStage.PRE_MATCH, "start_position");
+                                    const comments = data.get(MatchStage.POST_MATCH, "comments");
+                                    
+                                    // Get post match data
+                                    const disabled = data.getPostData("disabled");
+                                    const brownsOut = data.getPostData("brownsOut");
+                                    const wobbly = data.getPostData("wobbly");
+                                    const intakeBroken = data.getPostData("intakeBroken");
+                                    const outtakeBroken = data.getPostData("outtakeBroken");
+                                    const failedClimb = data.getPostData("failedClimb");
+                                    const trench = data.getPostData("trench");
+                                    const defense = data.getPostData("defense");
+                                    const shuttle = data.getPostData("shuttle");
+                                    
+                                    try {
+                                        await setDoc(doc(firebase, "fuelScoutData", team + "_" + match), {
+                                            team,
+                                            match,
+                                            name,
+                                            verificationCode,
+                                            alliance,
+                                            start_position,
+                                            comments,
+                                            fuelScored,
+                                            totalFuel: fuelScored.reduce((sum, val) => sum + val, 0),
+                                            burstCount: fuelScored.length - 1,
+                                            disabled,
+                                            brownsOut,
+                                            wobbly,
+                                            intakeBroken,
+                                            outtakeBroken,
+                                            failedClimb,
+                                            trench,
+                                            defense,
+                                            shuttle,
+                                            timestamp: Date.now(),
+                                        });
+                                        setAlert({ open: true, message: "Fuel data submitted successfully!", severity: "success" });
+                                        setTimeout(() => {
+                                            window.location.pathname = '/';
+                                        }, 1500);
+                                    } catch (error) {
+                                        setAlert({ open: true, message: "Error submitting data: " + error.message, severity: "error" });
+                                    }
+                                }}
                                 sx={{
                                     px: 4,
                                     py: 1.5,
