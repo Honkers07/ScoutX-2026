@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Stack, Typography, Button, useMediaQuery } from "@mui/material";
 import { Constants } from "../../Constants";
 import bgImage from "../../assets/backGround.png";
+import calculateFuelScored from "../FuelCalculator";
 
 
 export default function Home() {
@@ -94,7 +95,7 @@ export default function Home() {
 
 
 
-        
+         
            <Stack direction="row" spacing={2} sx={{ position: "absolute",
                     top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
                     left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
@@ -104,6 +105,31 @@ export default function Home() {
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
                {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
                {renderScoutButton('/credits', "Credits", isSmallScreen)}
+               <Button
+                   variant="contained"
+                   sx={{
+                       backgroundColor: "#1565C0",
+                       color: "white",
+                       borderRadius: "8px",
+                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
+                       py: 2,
+                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
+                       fontWeight: "bold",
+                       textTransform: "none",
+                       "&:hover": { backgroundColor: "#0D47A1" }
+                   }}
+                   onClick={async () => {
+                       try {
+                           const matchNumber = 1;
+                           const results = await calculateFuelScored(matchNumber);
+                           console.log("Fuel Scored Results:", results);
+                       } catch (error) {
+                           console.error("Error calculating fuel:", error);
+                       }
+                   }}
+               >
+                   Calculate Fuel
+               </Button>
 
            </Stack>
        </Box>
