@@ -25,6 +25,8 @@
   "apphosting": {
     "backendId": "scoutx-rebuilt",
     "rootDir": ".",
+    "dockerContext": "video-processor",
+    "dockerfile": "Dockerfile",
     "ignore": [
       "node_modules",
       ".git",

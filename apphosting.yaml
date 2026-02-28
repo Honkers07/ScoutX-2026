@@ -1,32 +1,12 @@
 # Settings for Backend (on Cloud Run).
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
 
-# Python backend configuration
-engine: python
-rootDirectory: video-processor
-
-# Optional: Override build and start commands
-# buildCommand: pip install -r requirements.txt
-# startCommand: gunicorn -b :$PORT app:app
+backend:
+  source: .
+  dockerContext: video-processor
+  dockerfile: Dockerfile
 
 runConfig:
   minInstances: 0
-  # maxInstances: 100
-  # concurrency: 80
-  # cpu: 1
-  # memoryMiB: 512
-
-# Environment variables and secrets.
-# env:
-  # Configure environment variables.
-  # See https://firebase.google.com/docs/app-hosting/configure#user-defined-environment
-  # - variable: MESSAGE
-  #   value: Hello world!
-  #   availability:
-  #     - BUILD
-  #     - RUNTIME
-
-  # Grant access to secrets in Cloud Secret Manager.
-  # See https://firebase.google.com/docs/app-hosting/configure#secret-parameters
-  # - variable: MY_SECRET
-  #   secret: mySecretRef
+  memoryMiB: 2048
+  cpu: 1
