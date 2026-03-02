@@ -172,7 +172,7 @@ vs. original: 2.0 balls/second (unadjusted)
  * @param {number} mergeThreshold - seconds between times to merge (default: 1)
  * @returns {Array<{startShootTime: number, endShootTime: number, duration: number}>}
  */
-function cleanAndMergeShootingTimes(shootingTimes, minShootingTime = SCOUTER_DELAY.END - SCOUTER_DELAY.START, mergeThreshold = 1) {
+function cleanAndMergeShootingTimes(shootingTimes, minShootingTime = SCOUTER_DELAY.END - SCOUTER_DELAY.START, mergeThreshold = DATA_FILTERING.SHOOTING_TIME_MERGE_THRESHOLD) {
   if (!shootingTimes || shootingTimes.length === 0) return [];
   
   // Step 1: Filter out short shooting times (accidental clicks)
@@ -899,7 +899,7 @@ const CONFIDENCE = {
 
 const DATA_FILTERING = {
   MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START,  // 1.25 seconds - ensures no negative times after delay adjustment
-  SHOOTING_TIME_MERGE_THRESHOLD: 1,  // seconds
+  SHOOTING_TIME_MERGE_THRESHOLD: 1.5,  // seconds
   MIN_SCORE_INCREMENT: 1,
   MAX_SCORE_INCREMENT: 4
 };
