@@ -110,26 +110,30 @@ const HISTORICAL_AVERAGING = {
 
 ## Data Filtering Rules
 
-## Data Filtering Rules
+### 1. Clean and Merge Shooting Times
 
-### 1. Merge Shooting Times Within 1 Second
+**Problem**: Scouters may accidentally count a single burst as multiple small bursts, which artificially inflates the robot's ball/s metric. Also, very short shooting times (< 1.25s) are likely accidental clicks.
 
-**Problem**: Scouters may accidentally count a single burst as multiple small bursts, which artificially inflates the robot's ball/s metric.
-
-**Solution**: Merge shooting times that are within 1 second of each other.
+**Solution**: First filter out short times, then merge shooting times that are within 1 second of each other.
 
 ```javascript
 /**
- * Merges shooting times that are within mergeThreshold seconds of each other
+ * Cleans and merges shooting times: filters short times then merges close times
  * @param {Array<{startShootTime: number, endShootTime: number, duration: number}>} shootingTimes
- * @param {number} mergeThreshold - seconds (default: 1)
+ * @param {number} minShootingTime - minimum duration to keep (default: 1.25)
+ * @param {number} mergeThreshold - seconds between times to merge (default: 1)
  * @returns {Array<{startShootTime: number, endShootTime: number, duration: number}>}
  */
-function mergeShootingTimes(shootingTimes, mergeThreshold = 1) {
+function cleanAndMergeShootingTimes(shootingTimes, minShootingTime = 1.25, mergeThreshold = 1) {
   if (!shootingTimes || shootingTimes.length === 0) return [];
   
-  // Sort by start time
-  const sorted = [...shootingTimes].sort((a, b) => a.startShootTime - b.startShootTime);
+  // Step 1: Filter out short shooting times (accidental clicks)
+  const filtered = shootingTimes.filter(time => time.duration >= minShootingTime);
+  
+  if (filtered.length === 0) return [];
+  
+  // Step 2: Sort by start time
+  const sorted = [...filtered].sort((a, b) => a.startShootTime - b.startShootTime);
   
   const merged = [sorted[0]];
   
@@ -269,8 +273,9 @@ function createScoreboardOffset(adjustedTimes) {
 
 We maintain THREE separate time arrays for different purposes:
 
-1. **Original/Merged Shooting Times**
-   - Raw data from mergeShootingTimes()
+1. **Original/Cleaned Shooting Times**
+   - Raw data from cleanAndMergeShootingTimes()
+   - AFTER filtering short times and merging
    - BEFORE any adjustments
 
 2. **Scouter-Adjusted Times** (for confidence calculation)
@@ -290,7 +295,7 @@ We maintain THREE separate time arrays for different purposes:
 
 ```javascript
 // Algorithm flow:
-// 1. mergeShootingTimes() → original times
+// 1. cleanAndMergeShootingTimes() → cleaned times
 // 2. adjustForScouterDelay() → scouter-adjusted times  
 // 3. Crop to active HUB periods → for confidence/exclusivity
 // 4. createScoreboardOffset() → scoreboard-offset times (NEW array)
@@ -461,8 +466,12 @@ flowchart TD
 - Extract shootingTimes array for each robot
 - Each entry has: startShootTime, endShootTime, duration
 
-### Step 2: Merge Shooting Times Within 1 Second
-- Apply `mergeShootingTimes()` to each robot's shootingTimes array
+### Step 2: Clean Original Shooting Data
+- First, filter out all shooting times with duration < MIN_SHOOTING_TIME (1.25 seconds)
+- This removes accidental clicks by scouters
+- **Important:** This also prevents inverse shooting times after delay adjustment
+  - Example: A shooting time of 20-21.25s (duration=1.25s) would become 19.25-19.25s after delay adjustment, which is invalid
+- Then apply `cleanAndMergeShootingTimes()` to each robot's shootingTimes array
 - This prevents artificially high ball/s metrics from fragmented burst recordings
 
 ### Step 3: Apply Scouter Delay Adjustment
@@ -479,6 +488,7 @@ flowchart TD
 - Apply `filterFuelIncrements()` to videoScoreData timeline
 - Only keep increments where `increment > 0 && increment < 5`
 - This removes score changes from fouls or other game pieces
+- **Assumption:** Fuel scored from human player is negligible and can be ignored
 
 ### Step 6: Calculate Exclusive Shooting Time & Confidence
 - For each robot, find time ranges where ONLY that robot was shooting (from scouter-adjusted times)
@@ -636,7 +646,7 @@ This method is used when:
    - Export for use in other components
 
 2. **Implement Helper Functions**
-   - `mergeShootingTimes(shootingTimes, mergeThreshold)` - Merge times within 1 second
+   - `cleanAndMergeShootingTimes(shootingTimes, minShootingTime, mergeThreshold)` - Filter short times then merge
    - `adjustForScouterDelay(shootingTimes)` - Apply scouter reaction delay
    - `filterFuelIncrements(scoreTimeline)` - Keep only increments < 5
    - `createScoreboardOffset(adjustedTimes)` - Create scoreboard-offset times
@@ -695,6 +705,7 @@ const CONFIDENCE = {
 };
 
 const DATA_FILTERING = {
+  MIN_SHOOTING_TIME: 1.25,           // seconds - remove shooting times shorter than this (accidental clicks)
   SHOOTING_TIME_MERGE_THRESHOLD: 1,  // seconds
   MIN_SCORE_INCREMENT: 1,
   MAX_SCORE_INCREMENT: 4
