@@ -290,11 +290,51 @@ function adjustForScouterDelay(shootingTimes) {
 
 **Example:**
 - Raw (scouter reports): 30-32s (duration = 2s)
-- After adjustment: start = 30-0.75 = 29.25s, end = 32-2.0 = 30s
-- Result: 29.25-30s (duration = 0.75s)
+- After adjustment: start = 30-1.0 = 29s, end = 32-2.0 = 30s
+- Result: 29-30s (duration = 1s)
 - **Note:** Times are clipped to 0 minimum, so early times like 0.5s become 0s
 
-### Step 2: Scoreboard Offset
+### Step 2: Crop to Active HUB Periods
+
+Crop each robot's shooting times to only include periods when their alliance's HUB is active.
+
+```javascript
+/**
+ * Crops shooting times to active HUB periods
+ * @param {Array} shootingTimes - Array of {start, end, duration} shooting times
+ * @param {Array} hubActivePeriods - Array of {start, end} active periods
+ * @returns {Array} - Cropped shooting times
+ */
+function cropToActiveHub(shootingTimes, hubActivePeriods) {
+  if (!shootingTimes || shootingTimes.length === 0) return [];
+  if (!hubActivePeriods || hubActivePeriods.length === 0) return [];
+  
+  const cropped = [];
+  
+  for (const time of shootingTimes) {
+    for (const period of hubActivePeriods) {
+      // Check if there's any overlap
+      if (time.end <= period.start || time.start >= period.end) continue;
+      
+      // Calculate overlap
+      const overlapStart = Math.max(time.start, period.start);
+      const overlapEnd = Math.min(time.end, period.end);
+      
+      if (overlapEnd > overlapStart) {
+        cropped.push({
+          start: overlapStart,
+          end: overlapEnd,
+          duration: overlapEnd - overlapStart
+        });
+      }
+    }
+  }
+  
+  return cropped;
+}
+```
+
+### Step 3: Scoreboard Offset
 
 The scoreboard has its own delay from when scoring happens to when it appears:
 - **Scoreboard start delay**: 1.5s (delay for first ball scored)
@@ -454,7 +494,7 @@ Output segments (each unique time range is a separate segment, multiple segments
 // Algorithm flow:
 // 1. cleanAndMergeShootingTimes() → cleaned times per robot
 // 2. adjustForScouterDelay() → scouter-adjusted times per robot (APPLIED INDIVIDUALLY)
-// 3. Crop to active HUB periods → for confidence/exclusivity per robot
+// 3. cropToActiveHub() → for confidence/exclusivity per robot
 // 4. findExclusiveAndMultipleShootingTimes() → combined segments
 // 5. Calculate confidence from exclusive segments in combined array
 // 6. createScoreboardOffset() → scoreboard-offset segments (APPLIED TO COMBINED)
@@ -839,6 +879,7 @@ This method is used when:
 2. **Implement Helper Functions**
    - `cleanAndMergeShootingTimes(shootingTimes, minShootingTime, mergeThreshold)` - Filter short times then merge
    - `adjustForScouterDelay(shootingTimes)` - Apply scouter reaction delay
+   - `cropToActiveHub(shootingTimes, hubActivePeriods)` - Crop shooting times to active HUB periods
    - `filterFuelIncrements(scoreTimeline)` - Keep only increments < 5
    - `findExclusiveAndMultipleShootingTimes(robotTimes)` - Combine all robots' times
    - `createScoreboardOffset(segments)` - Create scoreboard-offset segments
