@@ -160,7 +160,7 @@ vs. original: 2.0 balls/second (unadjusted)
 
 ### 1. Clean and Merge Shooting Times
 
-**Problem**: Scouters may accidentally count a single burst as multiple small bursts, which artificially inflates the robot's ball/s metric. Also, very short shooting times (< 1.25s) are likely accidental clicks.
+**Problem**: Scouters may accidentally count a single burst as multiple small bursts, which artificially inflates the robot's ball/s metric. Also, very short shooting times (< 1.0s) are likely accidental clicks.
 
 **Solution**: First filter out short times, then merge shooting times that are within 1 second of each other.
 
@@ -266,7 +266,7 @@ We SUBTRACT these delays to get "real" shooting times:
 
 ```javascript
 const SCOUTER_DELAY = {
-  START: 0.75,  // seconds - scouter reaction to robot starting
+  START: 1.0,  // seconds - scouter reaction to robot starting
   END: 2.0     // seconds - scouter reaction to robot ending
 };
 
@@ -898,14 +898,14 @@ const CONFIDENCE = {
 };
 
 const DATA_FILTERING = {
-  MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START,  // 1.25 seconds - ensures no negative times after delay adjustment
+  MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START,  // 1.00 seconds - ensures no negative times after delay adjustment and filters out accidental times from scouters
   SHOOTING_TIME_MERGE_THRESHOLD: 1.5,  // seconds
   MIN_SCORE_INCREMENT: 1,
   MAX_SCORE_INCREMENT: 4
 };
 
 const SCOUTER_DELAY = {
-  START: 1.5,   // seconds - scouter reaction to robot starting (higher to avoid missing early scores)
+  START: 1.0,  // seconds - scouter reaction to robot starting
   END: 2.0     // seconds - scouter reaction to robot ending
 };
 
@@ -914,6 +914,7 @@ const SCOREBOARD = {
   END: 2.2,     // seconds - delay for last ball scored
   RATE: 0.05    // additional delay per second of shooting
 };
+
 ```
 
 ---
