@@ -61,7 +61,7 @@ function overlapDuration(aStart, aEnd, bStart, bEnd) {
 }
 
 function splitAutoTeleByTime(time, value) {
-  if (time <= MATCH_TIMING.AUTO_END) return { auto: value, tele: 0 };
+  if (time <= MATCH_TIMING.TRANSITION_SHIFT_END) return { auto: value, tele: 0 };
   return { auto: 0, tele: value };
 }
 
@@ -329,7 +329,7 @@ function getAutoFuelFromTimeline(scoreTimeline) {
   const incs = filterFuelIncrements(scoreTimeline);
   let autoFuel = 0;
   for (const i of incs) {
-    if (i.time <= MATCH_TIMING.AUTO_END) autoFuel += i.increment;
+    if (i.time <= MATCH_TIMING.TRANSITION_SHIFT_END) autoFuel += i.increment;
   }
   return autoFuel;
 }
