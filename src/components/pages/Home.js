@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Stack, Typography, Button, useMediaQuery } from "@mui/material";
 import { Constants } from "../../Constants";
 import bgImage from "../../assets/backGround.png";
-import calculateFuelScored from "../FuelCalculatorKILO";
+import calculateFuelScored from "../FuelCalculatorFinal";
 
 
 export default function Home() {
