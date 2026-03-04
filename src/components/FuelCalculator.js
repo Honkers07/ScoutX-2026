@@ -1,488 +1,824 @@
-import firebase from "../firebase";
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  getDoc, 
-  doc 
+import db from "../firebase"; 
+
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 
-// FRC 2026 Match Timing Constants (in seconds from start of match)
-const MATCH_TIMING = {
-  AUTO_END: 20,           // AUTO ends at 20 seconds
-  TRANSITION_END: 30,    // TRANSITION ends at 30 seconds
-  SHIFT1_END: 55,        // SHIFT 1 ends at 55 seconds
-  SHIFT2_END: 80,        // SHIFT 2 ends at 80 seconds
-  SHIFT3_END: 105,       // SHIFT 3 ends at 105 seconds
-  SHIFT4_END: 130,       // SHIFT 4 ends at 130 seconds
-  END_GAME_END: 150,     // END GAME ends at 150 seconds (full match)
-  TOTAL_DURATION: 150
+// ----------------------------- Constants -----------------------------
+
+export const MATCH_TIMING = {
+  AUTO_END: 20,
+  TRANSITION_SHIFT_END: 23,
+  TRANSITION_END: 33,
+  SHIFT1_END: 58,
+  SHIFT2_END: 83,
+  SHIFT3_END: 108,
+  SHIFT4_END: 133,
+  END_GAME_END: 163,
+  TOTAL_DURATION: 163,
 };
 
-// Delay calculation constant
-const DELAY_BASE = 3;
-const DELAY_RATE = 0.2;
+export const CONFIDENCE = {
+  DECAY_CONSTANT: 0.1,
+  MAX_CONFIDENCE: 1.0,
+  LOW_CONFIDENCE_THRESHOLD: 0.3,
+};
 
-// Score increment threshold - ignore increments of 5 (likely fouls or other point sources)
-const IGNORE_SCORE_INCREMENTS = [5];
+export const HISTORICAL_AVERAGING = {
+  LOW_CONFIDENCE_THRESHOLD: 0.3,
+  DECAY_RATE: 0.8,
+  MIN_HISTORICAL_MATCHES: 1,
+  MAX_MATCHES_TO_LOOK_BACK: 12,
+};
 
-// Minimum gap between shooting times to be considered separate (1 second)
-const MIN_SHOOTING_GAP = 1;
+export const SCOUTER_DELAY = {
+  START: 1.0,
+  END: 2.0,
+};
 
-/**
- * Calculates the scoreboard delay based on shooting time
- * @param {number} shootingTime - Time spent shooting in seconds
- * @returns {number} - Delay in seconds
- */
-function calculateDelay(shootingTime) {
-  return DELAY_BASE + (DELAY_RATE * shootingTime);
+export const DATA_FILTERING = {
+  MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START, // 1.0s
+  SHOOTING_TIME_MERGE_THRESHOLD: 1.5,
+  MIN_SCORE_INCREMENT: 1,
+  MAX_SCORE_INCREMENT: 4,
+};
+
+export const SCOREBOARD = {
+  START: 1.5,
+  END: 2.2,
+  RATE: 0.05,
+};
+
+// ----------------------------- Small helpers -----------------------------
+
+function clamp01(x) {
+  if (x == null || Number.isNaN(x)) return 0;
+  return Math.max(0, Math.min(1, x));
 }
 
-/**
- * Determines HUB active periods for each alliance based on AUTO results
- * @param {Object} videoScoreData - Video score data document
- * @returns {Object} - { red: [periods], blue: [periods] }
- */
-function determineHubActivePeriods(videoScoreData) {
-  const redAutoFuel = videoScoreData.redScoreTimeline
-    ?.filter(t => t.time >= MATCH_TIMING.TOTAL_DURATION - MATCH_TIMING.AUTO_END)
-    ?.reduce((sum, t) => sum + t.score, 0) || 0;
-  
-  const blueAutoFuel = videoScoreData.blueScoreTimeline
-    ?.filter(t => t.time >= MATCH_TIMING.TOTAL_DURATION - MATCH_TIMING.AUTO_END)
-    ?.reduce((sum, t) => sum + t.score, 0) || 0;
+function overlapDuration(aStart, aEnd, bStart, bEnd) {
+  const s = Math.max(aStart, bStart);
+  const e = Math.min(aEnd, bEnd);
+  return e > s ? e - s : 0;
+}
 
-  // Both HUBS active during AUTO, TRANSITION, and END GAME
-  const redActivePeriods = [];
-  const blueActivePeriods = [];
+function splitAutoTeleByTime(time, value) {
+  if (time <= MATCH_TIMING.AUTO_END) return { auto: value, tele: 0 };
+  return { auto: 0, tele: value };
+}
 
-  // AUTO: Both active (0-20)
-  redActivePeriods.push({ start: 0, end: MATCH_TIMING.AUTO_END });
-  blueActivePeriods.push({ start: 0, end: MATCH_TIMING.AUTO_END });
+function roundFuel(x) {
+  return Math.round(Number(x ?? 0));
+}
 
-  // TRANSITION: Both active (20-30)
-  redActivePeriods.push({ start: MATCH_TIMING.AUTO_END, end: MATCH_TIMING.TRANSITION_END });
-  blueActivePeriods.push({ start: MATCH_TIMING.AUTO_END, end: MATCH_TIMING.TRANSITION_END });
+// ----------------------------- Data cleaning / timing -----------------------------
 
-  // END GAME: Both active (130-150)
-  redActivePeriods.push({ start: MATCH_TIMING.SHIFT4_END, end: MATCH_TIMING.TOTAL_DURATION });
-  blueActivePeriods.push({ start: MATCH_TIMING.SHIFT4_END, end: MATCH_TIMING.TOTAL_DURATION });
+export function cleanAndMergeShootingTimes(
+  shootingTimes,
+  minShootingTime = DATA_FILTERING.MIN_SHOOTING_TIME,
+  mergeThreshold = DATA_FILTERING.SHOOTING_TIME_MERGE_THRESHOLD
+) {
+  if (!Array.isArray(shootingTimes) || shootingTimes.length === 0) return [];
 
-  // ALLIANCE SHIFTS: Alternate based on AUTO results
-  if (redAutoFuel !== blueAutoFuel) {
-    // Determine which alliance won AUTO
-    const redWon = redAutoFuel > blueAutoFuel;
-    
-    // SHIFT 1 (30-55): Winner inactive, Loser active
-    if (redWon) {
-      blueActivePeriods.push({ start: MATCH_TIMING.TRANSITION_END, end: MATCH_TIMING.SHIFT1_END });
+  const filtered = shootingTimes.filter((t) => {
+    if (t == null) return false;
+    const start = Number(t.startShootTime ?? 0);
+    const end = Number(t.endShootTime ?? 0);
+    const duration = typeof t.duration === "number" ? t.duration : end - start;
+    return Number.isFinite(duration) && duration >= minShootingTime;
+  });
+
+  if (filtered.length === 0) return [];
+
+  const sorted = filtered
+    .map((t) => {
+      const start = Number(t.startShootTime ?? 0);
+      const end = Number(t.endShootTime ?? 0);
+      return {
+        startShootTime: start,
+        endShootTime: end,
+        duration: typeof t.duration === "number" ? t.duration : end - start,
+      };
+    })
+    .filter(
+      (t) =>
+        Number.isFinite(t.startShootTime) &&
+        Number.isFinite(t.endShootTime) &&
+        t.endShootTime >= t.startShootTime
+    )
+    .sort((a, b) => a.startShootTime - b.startShootTime);
+
+  const merged = [
+    {
+      ...sorted[0],
+      duration: sorted[0].endShootTime - sorted[0].startShootTime,
+    },
+  ];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i];
+    const last = merged[merged.length - 1];
+
+    if (cur.startShootTime - last.endShootTime <= mergeThreshold) {
+      last.endShootTime = Math.max(last.endShootTime, cur.endShootTime);
+      last.duration = last.endShootTime - last.startShootTime;
     } else {
-      redActivePeriods.push({ start: MATCH_TIMING.TRANSITION_END, end: MATCH_TIMING.SHIFT1_END });
+      merged.push({
+        startShootTime: cur.startShootTime,
+        endShootTime: cur.endShootTime,
+        duration: cur.endShootTime - cur.startShootTime,
+      });
     }
-
-    // SHIFT 2 (55-80): Alternate
-    if (redWon) {
-      redActivePeriods.push({ start: MATCH_TIMING.SHIFT1_END, end: MATCH_TIMING.SHIFT2_END });
-    } else {
-      blueActivePeriods.push({ start: MATCH_TIMING.SHIFT1_END, end: MATCH_TIMING.SHIFT2_END });
-    }
-
-    // SHIFT 3 (80-105): Alternate
-    if (redWon) {
-      blueActivePeriods.push({ start: MATCH_TIMING.SHIFT2_END, end: MATCH_TIMING.SHIFT3_END });
-    } else {
-      redActivePeriods.push({ start: MATCH_TIMING.SHIFT2_END, end: MATCH_TIMING.SHIFT3_END });
-    }
-
-    // SHIFT 4 (105-130): Alternate
-    if (redWon) {
-      redActivePeriods.push({ start: MATCH_TIMING.SHIFT3_END, end: MATCH_TIMING.SHIFT4_END });
-    } else {
-      blueActivePeriods.push({ start: MATCH_TIMING.SHIFT3_END, end: MATCH_TIMING.SHIFT4_END });
-    }
-  } else {
-    // Tie: Use score increments during shifts to determine (random default if can't determine)
-    // Default: Red active for odd shifts, Blue for even (or vice versa)
-    // For simplicity, default to Red active first
-    redActivePeriods.push({ start: MATCH_TIMING.TRANSITION_END, end: MATCH_TIMING.SHIFT1_END });
-    blueActivePeriods.push({ start: MATCH_TIMING.SHIFT1_END, end: MATCH_TIMING.SHIFT2_END });
-    redActivePeriods.push({ start: MATCH_TIMING.SHIFT2_END, end: MATCH_TIMING.SHIFT3_END });
-    blueActivePeriods.push({ start: MATCH_TIMING.SHIFT3_END, end: MATCH_TIMING.SHIFT4_END });
   }
 
-  return { red: redActivePeriods, blue: blueActivePeriods };
+  return merged.filter((t) => t.duration > 0);
 }
 
-/**
- * Crops a time range to only include active HUB periods
- * @param {number} start - Start time
- * @param {number} end - End time
- * @param {Array} activePeriods - Array of {start, end} periods
- * @returns {Array} - Array of cropped periods
- */
-function cropToActivePeriods(start, end, activePeriods) {
+export function adjustForScouterDelay(shootingTimes) {
+  if (!Array.isArray(shootingTimes) || shootingTimes.length === 0) return [];
+  return shootingTimes
+    .map((t) => {
+      const rawStart = Number(t.startShootTime ?? t.start ?? 0);
+      const rawEnd = Number(t.endShootTime ?? t.end ?? 0);
+
+      const adjustedStart = Math.max(0, rawStart - SCOUTER_DELAY.START);
+      const adjustedEnd = Math.max(0, rawEnd - SCOUTER_DELAY.END);
+
+      return {
+        start: adjustedStart,
+        end: adjustedEnd,
+        duration: adjustedEnd - adjustedStart,
+      };
+    })
+    .filter((t) => Number.isFinite(t.duration) && t.duration > 0);
+}
+
+export function cropToActiveHub(shootingTimes, hubActivePeriods) {
+  if (!Array.isArray(shootingTimes) || shootingTimes.length === 0) return [];
+  if (!Array.isArray(hubActivePeriods) || hubActivePeriods.length === 0) return [];
+
   const cropped = [];
-  
-  for (const period of activePeriods) {
-    if (period.start >= end || period.end <= start) continue;
-    
-    const croppedStart = Math.max(start, period.start);
-    const croppedEnd = Math.min(end, period.end);
-    
-    if (croppedEnd > croppedStart) {
-      cropped.push({ start: croppedStart, end: croppedEnd });
+  for (const time of shootingTimes) {
+    for (const p of hubActivePeriods) {
+      if (time.end <= p.start || time.start >= p.end) continue;
+      const s = Math.max(time.start, p.start);
+      const e = Math.min(time.end, p.end);
+      if (e > s) cropped.push({ start: s, end: e, duration: e - s });
     }
   }
-  
   return cropped;
 }
 
 /**
- * Merges shooting times that are within MIN_SHOOTING_GAP seconds of each other
- * @param {Array} shootingTimes - Array of {startShootTime, endShootTime, duration}
- * @returns {Array} - Array of merged shooting times
+ * Your timeline entries have `timestamp`. We output {time, increment}.
+ * We recompute increment from score (safer).
  */
-function mergeCloseShootingTimes(shootingTimes) {
-  if (!shootingTimes || shootingTimes.length === 0) return [];
-  
-  // Sort by start time
-  const sorted = [...shootingTimes].sort((a, b) => a.startShootTime - b.startShootTime);
-  
-  const merged = [];
-  let current = { ...sorted[0] };
-  
-  for (let i = 1; i < sorted.length; i++) {
-    const next = sorted[i];
-    // Check if the gap between current end and next start is less than MIN_SHOOTING_GAP
-    const gap = next.startShootTime - current.endShootTime;
-    
-    if (gap <= MIN_SHOOTING_GAP) {
-      // Merge: extend current to include next
-      current.endShootTime = next.endShootTime;
-      current.duration = current.endShootTime - current.startShootTime;
-    } else {
-      // Push current and start new
-      merged.push(current);
-      current = { ...next };
+export function filterFuelIncrements(scoreTimeline) {
+  if (!Array.isArray(scoreTimeline) || scoreTimeline.length === 0) return [];
+
+  const filtered = [];
+  for (let i = 1; i < scoreTimeline.length; i++) {
+    const cur = scoreTimeline[i];
+    const prev = scoreTimeline[i - 1];
+    if (!cur || !prev) continue;
+    if (cur.score == null || prev.score == null) continue;
+
+    const inc = Number(cur.score) - Number(prev.score);
+    const t = Number(cur.timestamp ?? cur.time ?? 0);
+
+    if (
+      inc >= DATA_FILTERING.MIN_SCORE_INCREMENT &&
+      inc <= DATA_FILTERING.MAX_SCORE_INCREMENT &&
+      Number.isFinite(t)
+    ) {
+      filtered.push({
+        time: t,
+        score: Number(cur.score),
+        increment: inc,
+      });
     }
   }
-  
-  // Don't forget the last one
-  merged.push(current);
-  
-  return merged;
+  return filtered;
 }
 
-/**
- * Finds time ranges where only one robot was shooting
- * @param {Array} shootingTimes - Array of {startShootTime, endShootTime} for a robot
- * @param {Array} otherShootingTimes - Array of shooting times for other robots on same alliance
- * @returns {Array} - Array of exclusive periods {start, end, duration}
- */
-function findExclusivePeriods(shootingTimes, otherShootingTimes) {
-  const exclusive = [];
-  
-  for (const time of shootingTimes) {
-    let isExclusive = true;
-    
-    for (const other of otherShootingTimes) {
-      // Check if time ranges overlap
-      if (time.startShootTime < other.endShootTime && time.endShootTime > other.startShootTime) {
-        isExclusive = false;
+export function findExclusiveAndMultipleShootingTimes(robotTimes) {
+  if (!Array.isArray(robotTimes) || robotTimes.length === 0) return [];
+
+  const all = [];
+  robotTimes.forEach((times, idx) => {
+    (times || []).forEach((t) => {
+      if (!t) return;
+      const s = Number(t.start);
+      const e = Number(t.end);
+      if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return;
+      all.push({ start: s, end: e, robotIndex: idx });
+    });
+  });
+
+  all.sort((a, b) => a.start - b.start);
+  if (all.length === 0) return [];
+
+  const segments = [];
+  let current = {
+    start: all[0].start,
+    end: all[0].end,
+    robots: [all[0].robotIndex],
+  };
+
+  for (let i = 1; i < all.length; i++) {
+    const t = all[i];
+    if (t.start <= current.end) {
+      current.end = Math.max(current.end, t.end);
+      if (!current.robots.includes(t.robotIndex)) current.robots.push(t.robotIndex);
+    } else {
+      segments.push(current);
+      current = { start: t.start, end: t.end, robots: [t.robotIndex] };
+    }
+  }
+  segments.push(current);
+
+  return segments.map((s) => ({
+    start: s.start,
+    end: s.end,
+    duration: s.end - s.start,
+    type: s.robots.length === 1 ? "exclusive" : "multiple",
+    robots: s.robots,
+  }));
+}
+
+export function createScoreboardOffset(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) return [];
+  return segments.map((seg) => {
+    const duration = Number(seg.duration ?? (seg.end - seg.start));
+    return {
+      start: seg.start + SCOREBOARD.START,
+      end: seg.end + SCOREBOARD.END + duration * SCOREBOARD.RATE,
+      originalStart: seg.start,
+      originalEnd: seg.end,
+      duration,
+      type: seg.type,
+      robots: seg.robots,
+    };
+  });
+}
+
+export function resolveOverlaps(offsetSegments) {
+  if (!Array.isArray(offsetSegments) || offsetSegments.length === 0) return [];
+  const sorted = [...offsetSegments].sort((a, b) => a.originalStart - b.originalStart);
+
+  const resolved = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const current = { ...sorted[i] };
+    const last = resolved[resolved.length - 1];
+
+    if (current.start < last.end) {
+      const overlap = last.end - current.start;
+      const half = overlap / 2;
+      last.end = last.end - half;
+      current.start = current.start + half;
+    }
+
+    if (last.end < last.start) last.end = last.start;
+    if (current.end < current.start) current.end = current.start;
+
+    resolved.push(current);
+  }
+
+  return resolved;
+}
+
+export function calculateConfidence(exclusiveTimeSeconds) {
+  const t = Math.max(0, Number(exclusiveTimeSeconds ?? 0));
+  if (!Number.isFinite(t) || t <= 0) return 0;
+  const c = 1 - Math.exp(-CONFIDENCE.DECAY_CONSTANT * t);
+  return Math.min(CONFIDENCE.MAX_CONFIDENCE, Math.max(0, c));
+}
+
+// ----------------------------- Historical averaging -----------------------------
+
+export function estimateBallPerSecond(
+  currentBps,
+  currentConfidence,
+  matchDataTeams,
+  teamNumber,
+  decayRate = HISTORICAL_AVERAGING.DECAY_RATE
+) {
+  const confC = clamp01(currentConfidence);
+  const bpsC = Number(currentBps ?? 0);
+
+  if (confC >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD) return bpsC;
+
+  const historical = (matchDataTeams || []).filter((t) => t.teamNumber === teamNumber);
+  if (historical.length < HISTORICAL_AVERAGING.MIN_HISTORICAL_MATCHES) return bpsC;
+
+  let weightedSum = bpsC * confC;
+  let weightSum = confC;
+
+  for (const m of historical) {
+    const matchesAgo = Math.max(1, Number(m.matchesAgo ?? 1));
+    const recencyFactor = Math.pow(decayRate, matchesAgo);
+    const w = clamp01(m.confidence) * recencyFactor;
+    weightedSum += Number(m.ballsPerSecond ?? 0) * w;
+    weightSum += w;
+  }
+
+  return weightSum > 0 ? weightedSum / weightSum : bpsC;
+}
+
+// ----------------------------- HUB logic -----------------------------
+
+function getAutoFuelFromTimeline(scoreTimeline) {
+  const incs = filterFuelIncrements(scoreTimeline);
+  let autoFuel = 0;
+  for (const i of incs) {
+    if (i.time <= MATCH_TIMING.AUTO_END) autoFuel += i.increment;
+  }
+  return autoFuel;
+}
+
+function determineAutoWinner(videoScoreDoc) {
+  const redAuto = getAutoFuelFromTimeline(videoScoreDoc?.redScoreTimeline || []);
+  const blueAuto = getAutoFuelFromTimeline(videoScoreDoc?.blueScoreTimeline || []);
+  if (redAuto > blueAuto) return "red";
+  if (blueAuto > redAuto) return "blue";
+  return "tie";
+}
+
+function getHubActivePeriods(alliance /* "red"|"blue" */, autoWinner /* "red"|"blue" */) {
+  const periods = [];
+
+  // BOTH ACTIVE
+  periods.push({ start: 0, end: MATCH_TIMING.TRANSITION_END });
+  periods.push({ start: MATCH_TIMING.SHIFT4_END, end: MATCH_TIMING.END_GAME_END });
+
+  // Alternating shifts
+  const shifts = [
+    { start: MATCH_TIMING.TRANSITION_END, end: MATCH_TIMING.SHIFT1_END },
+    { start: MATCH_TIMING.SHIFT1_END, end: MATCH_TIMING.SHIFT2_END },
+    { start: MATCH_TIMING.SHIFT2_END, end: MATCH_TIMING.SHIFT3_END },
+    { start: MATCH_TIMING.SHIFT3_END, end: MATCH_TIMING.SHIFT4_END },
+  ];
+
+  const shift1ActiveAlliance = autoWinner === "red" ? "blue" : "red";
+
+  shifts.forEach((sh, idx) => {
+    const activeAlliance = idx % 2 === 0 ? shift1ActiveAlliance : autoWinner;
+    if (alliance === activeAlliance) periods.push({ start: sh.start, end: sh.end });
+  });
+
+  return periods;
+}
+
+// ----------------------------- Firestore reads -----------------------------
+
+async function getVideoScoreData(matchNumber) {
+  const qy = query(
+    collection(db, "videoScoreData"),
+    where("matchNumber", "==", String(matchNumber)),
+    limit(1)
+  );
+  const snap = await getDocs(qy);
+  if (snap.empty) return null;
+  return snap.docs[0].data();
+}
+
+async function getTimerScoutData(matchNumber) {
+  const qy = query(
+    collection(db, "timerScoutData"),
+    where("match", "==", String(matchNumber))
+  );
+  const snap = await getDocs(qy);
+  return snap.docs.map((d) => d.data());
+}
+
+async function getFuelScoutData(matchNumber) {
+  // Unknown schema; try both match and matchNumber as string.
+  const c = collection(db, "fuelScoutData");
+
+  const qMatch = query(c, where("match", "==", String(matchNumber)));
+  const sMatch = await getDocs(qMatch);
+  if (!sMatch.empty) return sMatch.docs.map((d) => d.data());
+
+  const qMatchNumber = query(c, where("matchNumber", "==", String(matchNumber)));
+  const sMatchNumber = await getDocs(qMatchNumber);
+  return sMatchNumber.docs.map((d) => d.data());
+}
+
+async function getMatchDataHistory(matchNumber, teamNumber) {
+  const qy = query(
+    collection(db, "matchData"),
+    where("matchNumber", "<", Number(matchNumber)),
+    orderBy("matchNumber", "desc"),
+    limit(HISTORICAL_AVERAGING.MAX_MATCHES_TO_LOOK_BACK)
+  );
+
+  const snap = await getDocs(qy);
+
+  let ago = 0;
+  const out = [];
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const teams = Array.isArray(data?.teams) ? data.teams : [];
+    const entry = teams.find((t) => Number(t.teamNumber) === Number(teamNumber));
+    if (!entry) continue;
+    ago += 1;
+    out.push({
+      teamNumber: Number(teamNumber),
+      ballsPerSecond: Number(entry.ballsPerSecond ?? 0),
+      confidence: clamp01(entry.confidence),
+      matchesAgo: ago,
+    });
+  }
+
+  return out;
+}
+
+// ----------------------------- Attribution utilities -----------------------------
+
+function attributeIncrementsToSegments(increments, resolvedOffsetSegments) {
+  const segFuel = resolvedOffsetSegments.map(() => ({
+    autoFuel: 0,
+    teleFuel: 0,
+    totalFuel: 0,
+  }));
+
+  for (const inc of increments) {
+    const t = inc.time;
+    const v = inc.increment;
+
+    let hit = -1;
+    for (let i = 0; i < resolvedOffsetSegments.length; i++) {
+      const s = resolvedOffsetSegments[i];
+      if (t >= s.start && t <= s.end) {
+        hit = i;
         break;
       }
     }
-    
-    if (isExclusive) {
-      exclusive.push({
-        start: time.startShootTime,
-        end: time.endShootTime,
-        duration: time.duration
-      });
-    }
+    if (hit === -1) continue;
+
+    const buckets = splitAutoTeleByTime(t, v);
+    segFuel[hit].autoFuel += buckets.auto;
+    segFuel[hit].teleFuel += buckets.tele;
+    segFuel[hit].totalFuel += v;
   }
-  
-  return exclusive;
+
+  return segFuel;
 }
 
-/**
- * Gets fuel scored during a time range from score timeline
- * @param {Array} timeline - Score timeline array
- * @param {number} start - Start time (seconds from match end, like timer)
- * @param {number} end - End time
- * @returns {number} - Fuel scored during the period
- */
-function getFuelDuringPeriod(timeline, start, end) {
-  if (!timeline) return 0;
-  
-  // Timer counts down, so lower time = later in match
-  // Convert to match time (0 = start, 150 = end)
-  const matchStart = MATCH_TIMING.TOTAL_DURATION - end;
-  const matchEnd = MATCH_TIMING.TOTAL_DURATION - start;
-  
-  return timeline
-    .filter(t => {
-      // Skip score increments of 5 (likely fouls or other point sources)
-      if (IGNORE_SCORE_INCREMENTS.includes(t.score)) return false;
-      
-      const tMatchTime = MATCH_TIMING.TOTAL_DURATION - t.time;
-      return tMatchTime >= matchStart && tMatchTime < matchEnd;
-    })
-    .reduce((sum, t) => sum + t.score, 0);
-}
+function distributeMultipleSegmentFuel({
+  robots,
+  duration,
+  fuelAuto,
+  fuelTele,
+  bpsByRobot,
+  addFuel,
+}) {
+  const idxs = robots;
+  const known = idxs.filter((i) => Number(bpsByRobot[i] ?? 0) > 0);
+  const unknown = idxs.filter((i) => !(Number(bpsByRobot[i] ?? 0) > 0));
 
-/**
- * Calculates fuel scored using Video Method (requires all 6 teams)
- * @param {Object} videoScoreData - Video score data document
- * @param {Array} timerScoutData - Array of timer scout documents
- * @returns {Array} - Array of {team, match, autoFuel, teleFuel}
- */
-function calculateWithVideoMethod(videoScoreData, timerScoutData) {
-  const results = [];
-  
-  // Determine HUB active periods
-  const hubPeriods = determineHubActivePeriods(videoScoreData);
-  
-  // Group by alliance
-  const redTeams = timerScoutData.filter(t => t.alliance === 'red');
-  const blueTeams = timerScoutData.filter(t => t.alliance === 'blue');
-  
-  // Process each team
-  const processAlliance = (teams, alliance) => {
-    const activePeriods = hubPeriods[alliance];
-    
-    for (const teamDoc of teams) {
-      const team = teamDoc.team;
-      const shootingTimes = teamDoc.shootingTimes || [];
-      
-      // Crop shooting times to active HUB periods
-      const croppedTimes = [];
-      for (const time of shootingTimes) {
-        const cropped = cropToActivePeriods(
-          time.startShootTime,
-          time.endShootTime,
-          activePeriods
-        );
-        croppedTimes.push(...cropped);
-      }
-      
-      // Merge shooting times that are within 1 second of each other
-      const mergedTimes = mergeCloseShootingTimes(
-        croppedTimes.map(t => ({ startShootTime: t.start, endShootTime: t.end, duration: t.end - t.start }))
-      );
-      
-      // Find exclusive periods
-      const otherTeams = teams.filter(t => t.team !== team);
-      const otherTimes = otherTeams.flatMap(t => t.shootingTimes || []);
-      const exclusivePeriods = findExclusivePeriods(mergedTimes, otherTimes);
-      
-      // Calculate fuel/second rate from exclusive periods
-      let fuelPerSecond = 0;
-      if (exclusivePeriods.length > 0) {
-        let totalFuel = 0;
-        let totalTime = 0;
-        
-        for (const period of exclusivePeriods) {
-          const delay = calculateDelay(period.duration);
-          const fuel = getFuelDuringPeriod(
-            alliance === 'red' ? videoScoreData.redScoreTimeline : videoScoreData.blueScoreTimeline,
-            period.start,
-            period.end + delay
-          );
-          totalFuel += fuel;
-          totalTime += period.duration;
-        }
-        
-        fuelPerSecond = totalTime > 0 ? totalFuel / totalTime : 0;
-      }
-      
-      // Calculate total fuel for this team
-      let autoFuel = 0;
-      let teleFuel = 0;
-      
-      for (const time of mergedTimes) {
-        const delay = calculateDelay(time.end - time.start);
-        const fuel = getFuelDuringPeriod(
-          alliance === 'red' ? videoScoreData.redScoreTimeline : videoScoreData.blueScoreTimeline,
-          time.start,
-          time.end + delay
-        );
-        
-        // Determine if AUTO or TELEOP
-        if (time.start >= MATCH_TIMING.TOTAL_DURATION - MATCH_TIMING.AUTO_END) {
-          // In AUTO (last 20 seconds of countdown = first 20 seconds of match)
-          autoFuel += fuel;
-        } else {
-          teleFuel += fuel;
-        }
-      }
-      
-      // If no exclusive periods, use proportional distribution
-      if (exclusivePeriods.length === 0 && mergedTimes.length > 0) {
-        // All times were overlapping with others - use average rate from alliance
-        // This is a simplified approach
-        const allianceTotalFuel = alliance === 'red' 
-          ? videoScoreData.redTotalScore 
-          : videoScoreData.blueTotalScore;
-        const allianceTotalTime = teams.reduce((sum, t) => 
-          sum + (t.shootingTimes || []).reduce((s, time) => s + time.duration, 0), 0
-        );
-        
-        const teamTotalTime = mergedTimes.reduce((sum, t) => sum + (t.end - t.start), 0);
-        const avgRate = allianceTotalTime > 0 ? allianceTotalFuel / allianceTotalTime : 0;
-        
-        autoFuel = 0; // Would need more complex distribution
-        teleFuel = teamTotalTime * avgRate;
-      }
-      
-      results.push({
-        team,
-        match: videoScoreData.match,
-        autoFuel,
-        teleFuel,
-        method: 'video'
-      });
+  const distBucket = (bucketFuel, isAuto) => {
+    if (bucketFuel <= 0) return;
+
+    if (known.length === 0) {
+      const each = bucketFuel / idxs.length;
+      for (const i of idxs) addFuel(i, isAuto ? each : 0, isAuto ? 0 : each);
+      return;
     }
+
+    if (known.length === idxs.length) {
+      const totalBps = known.reduce((s, i) => s + Number(bpsByRobot[i]), 0);
+      if (totalBps <= 0) {
+        const each = bucketFuel / idxs.length;
+        for (const i of idxs) addFuel(i, isAuto ? each : 0, isAuto ? 0 : each);
+        return;
+      }
+      for (const i of known) {
+        const share = (Number(bpsByRobot[i]) / totalBps) * bucketFuel;
+        addFuel(i, isAuto ? share : 0, isAuto ? 0 : share);
+      }
+      return;
+    }
+
+    const knownExpected = known.reduce(
+      (s, i) => s + Number(bpsByRobot[i]) * duration,
+      0
+    );
+
+    if (knownExpected <= 0) {
+      const each = bucketFuel / idxs.length;
+      for (const i of idxs) addFuel(i, isAuto ? each : 0, isAuto ? 0 : each);
+      return;
+    }
+
+    if (knownExpected >= bucketFuel) {
+      const scale = bucketFuel / knownExpected;
+      for (const i of known) {
+        const share = Number(bpsByRobot[i]) * duration * scale;
+        addFuel(i, isAuto ? share : 0, isAuto ? 0 : share);
+      }
+      return; // unknown gets 0
+    }
+
+    for (const i of known) {
+      const share = Number(bpsByRobot[i]) * duration;
+      addFuel(i, isAuto ? share : 0, isAuto ? 0 : share);
+    }
+
+    const remaining = bucketFuel - knownExpected;
+    if (unknown.length === 0) return;
+    const each = remaining / unknown.length;
+    for (const i of unknown) addFuel(i, isAuto ? each : 0, isAuto ? 0 : each);
   };
-  
-  processAlliance(redTeams, 'red');
-  processAlliance(blueTeams, 'blue');
-  
-  return results;
+
+  distBucket(fuelAuto, true);
+  distBucket(fuelTele, false);
 }
 
-/**
- * Calculates fuel scored using Basic Method (fallback)
- * @param {Array} fuelScoutData - Array of fuel scout documents
- * @param {Array} timerScoutData - Array of timer scout documents
- * @param {number} matchNumber - Match number
- * @returns {Array} - Array of {team, match, autoFuel, teleFuel}
- */
-function calculateWithBasicMethod(fuelScoutData, timerScoutData, matchNumber) {
-  const results = [];
-  
-  // Group timer data by team
-  const timerByTeam = {};
-  for (const doc of timerScoutData) {
-    timerByTeam[doc.team] = doc;
-  }
-  
-  for (const fuelDoc of fuelScoutData) {
-    const team = fuelDoc.team;
-    const timerDoc = timerByTeam[team];
-    
-    if (!timerDoc || !timerDoc.shootingTimes) continue;
-    
-    // Calculate total fuel
-    const fuelScored = fuelDoc.fuelScored || [];
-    const totalFuel = fuelScored.reduce((sum, val) => sum + val, 0);
-    
-    // Calculate time in AUTO vs TELEOP
-    let autoTime = 0;
-    let teleTime = 0;
-    
-    for (const time of timerDoc.shootingTimes) {
-      // Convert timer values to match time
-      const startMatchTime = MATCH_TIMING.TOTAL_DURATION - time.startShootTime;
-      const endMatchTime = MATCH_TIMING.TOTAL_DURATION - time.endShootTime;
-      
-      if (startMatchTime >= MATCH_TIMING.AUTO_END) {
-        // Entirely in AUTO
-        autoTime += time.duration;
-      } else if (endMatchTime <= MATCH_TIMING.AUTO_END) {
-        // Entirely in TELEOP
-        teleTime += time.duration;
-      } else {
-        // Spans both
-        const autoPortion = Math.min(MATCH_TIMING.AUTO_END, endMatchTime) - startMatchTime;
-        const telePortion = time.duration - autoPortion;
-        autoTime += Math.max(0, autoPortion);
-        teleTime += Math.max(0, telePortion);
-      }
+// ----------------------------- Video Method (per alliance) -----------------------------
+
+async function runVideoMethodForAlliance({ allianceTeams, scoreTimeline, matchNumber }) {
+  const robotTimes = allianceTeams.map((t) => t.shootingTimesAdjustedCropped);
+
+  const segments = findExclusiveAndMultipleShootingTimes(robotTimes);
+
+  const exclusiveTime = new Array(allianceTeams.length).fill(0);
+  segments.forEach((seg) => {
+    if (seg.type !== "exclusive") return;
+    const idx = seg.robots[0];
+    exclusiveTime[idx] += seg.duration;
+  });
+
+  const confidence = exclusiveTime.map((t) => calculateConfidence(t));
+
+  const offsetSegments = createScoreboardOffset(segments);
+  const resolved = resolveOverlaps(offsetSegments);
+
+  const increments = filterFuelIncrements(scoreTimeline);
+  const segFuel = attributeIncrementsToSegments(increments, resolved);
+
+  const fuelAutoByRobot = new Array(allianceTeams.length).fill(0);
+  const fuelTeleByRobot = new Array(allianceTeams.length).fill(0);
+  const exclusiveFuelByRobot = new Array(allianceTeams.length).fill(0);
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const f = segFuel[i];
+    if (!f) continue;
+
+    if (seg.type === "exclusive") {
+      const idx = seg.robots[0];
+      fuelAutoByRobot[idx] += f.autoFuel;
+      fuelTeleByRobot[idx] += f.teleFuel;
+      exclusiveFuelByRobot[idx] += f.totalFuel;
     }
-    
-    const totalTime = autoTime + teleTime;
-    
-    // Distribute fuel proportionally
-    const autoFuel = totalTime > 0 ? Math.round(totalFuel * (autoTime / totalTime)) : 0;
-    const teleFuel = totalFuel - autoFuel;
-    
-    results.push({
-      team,
-      match: matchNumber,
-      autoFuel,
-      teleFuel,
-      method: 'basic'
+  }
+
+  const rawBps = allianceTeams.map((_, idx) => {
+    const t = exclusiveTime[idx];
+    if (t <= 0) return 0;
+    return exclusiveFuelByRobot[idx] / t;
+  });
+
+  const bps = [...rawBps];
+
+  const histories = await Promise.all(
+    allianceTeams.map(async (t, idx) => {
+      if (confidence[idx] >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD) return [];
+      return getMatchDataHistory(matchNumber, t.teamNumber);
+    })
+  );
+
+  for (let i = 0; i < allianceTeams.length; i++) {
+    const teamNumber = allianceTeams[i].teamNumber;
+    bps[i] = estimateBallPerSecond(rawBps[i], confidence[i], histories[i], teamNumber);
+  }
+
+  const addFuel = (robotIdx, autoAdd, teleAdd) => {
+    fuelAutoByRobot[robotIdx] += autoAdd;
+    fuelTeleByRobot[robotIdx] += teleAdd;
+  };
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg.type !== "multiple") continue;
+
+    const f = segFuel[i];
+    if (!f || f.totalFuel <= 0) continue;
+
+    distributeMultipleSegmentFuel({
+      robots: seg.robots,
+      duration: seg.duration,
+      fuelAuto: f.autoFuel,
+      fuelTele: f.teleFuel,
+      bpsByRobot: bps,
+      addFuel,
     });
   }
-  
+
+  return allianceTeams.map((t, idx) => {
+    const autoFuel = fuelAutoByRobot[idx];
+    const teleFuel = fuelTeleByRobot[idx];
+    const totalFuel = autoFuel + teleFuel;
+
+    const shootingTime = (t.shootingTimesAdjustedCropped || []).reduce(
+      (s, x) => s + (x.duration || 0),
+      0
+    );
+
+    return {
+      team: Number(t.teamNumber),
+      match: Number(matchNumber),
+      alliance: t.alliance, 
+      autoFuel,
+      teleFuel,
+      totalFuel,
+      ballsPerSec: bps[idx],
+      shootingTime,
+      confidence: confidence[idx],
+      method: "video",
+    };
+  });
+}
+
+// ----------------------------- Basic Method (fallback) -----------------------------
+
+function averageBpsFromBursts(bursts) {
+  if (!Array.isArray(bursts) || bursts.length === 0) return 0;
+
+  let sum = 0;
+  let count = 0;
+  for (const b of bursts) {
+    if (!b) continue;
+    const fuel = Number(b.fuelScored ?? 0);
+    const dur = Number(b.duration ?? 0);
+    if (!Number.isFinite(fuel) || !Number.isFinite(dur) || dur <= 0) continue;
+    sum += fuel / dur;
+    count += 1;
+  }
+  return count > 0 ? sum / count : 0;
+}
+
+function sumAutoTeleTimeFromAdjustedTimes(adjustedTimes) {
+  let autoTime = 0;
+  let teleTime = 0;
+
+  for (const t of adjustedTimes || []) {
+    const s = Number(t.start);
+    const e = Number(t.end);
+    if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
+
+    autoTime += overlapDuration(s, e, 0, MATCH_TIMING.AUTO_END);
+    teleTime += overlapDuration(s, e, MATCH_TIMING.AUTO_END, MATCH_TIMING.END_GAME_END);
+  }
+
+  return { autoTime, teleTime };
+}
+
+// ----------------------------- Main function -----------------------------
+
+export async function calculateFuelScored(matchNumber) {
+  const m = Number(matchNumber);
+  if (!Number.isFinite(m)) throw new Error("calculateFuelScored: matchNumber must be a number");
+
+  const videoScore = await getVideoScoreData(m);
+
+  const timerDocs = await getTimerScoutData(m);
+  const fuelDocs = await getFuelScoutData(m);
+
+  const timerByTeam = new Map();
+  for (const d of timerDocs) {
+    const team = Number(d.team ?? d.teamNumber);
+    if (!Number.isFinite(team)) continue;
+
+    if (!timerByTeam.has(team)) {
+      timerByTeam.set(team, d);
+    } else {
+      const prev = timerByTeam.get(team);
+      const prevTs = Number(prev.timestamp ?? 0);
+      const curTs = Number(d.timestamp ?? 0);
+      if (curTs >= prevTs) timerByTeam.set(team, d);
+    }
+  }
+
+  const fuelByTeam = new Map();
+  for (const d of fuelDocs) {
+    const team = Number(d.team ?? d.teamNumber);
+    if (!Number.isFinite(team)) continue;
+    fuelByTeam.set(team, d);
+  }
+
+  const distinctTeams = new Set([...timerByTeam.keys()]);
+  const canVideo =
+    !!videoScore &&
+    distinctTeams.size === 6 &&
+    determineAutoWinner(videoScore) !== "tie";
+
+  if (canVideo) {
+    const autoWinner = determineAutoWinner(videoScore);
+    const redPeriods = getHubActivePeriods("red", autoWinner);
+    const bluePeriods = getHubActivePeriods("blue", autoWinner);
+
+    const redTeams = [];
+    const blueTeams = [];
+
+    for (const [, doc] of timerByTeam.entries()) {
+      const teamNumber = Number(doc.team ?? doc.teamNumber);
+      const allianceRaw = String(doc.alliance ?? "").trim().toLowerCase();
+      const alliance =
+        allianceRaw === "blue" ? "blue" : allianceRaw === "red" ? "red" : "";
+
+      const rawTimes = Array.isArray(doc.shootingTimes) ? doc.shootingTimes : [];
+      const merged = cleanAndMergeShootingTimes(rawTimes);
+      const adjusted = adjustForScouterDelay(merged);
+
+      const periods =
+        alliance === "red" ? redPeriods : alliance === "blue" ? bluePeriods : null;
+      const cropped = periods ? cropToActiveHub(adjusted, periods) : [];
+
+      const entry = { teamNumber, alliance, shootingTimesAdjustedCropped: cropped };
+      if (alliance === "red") redTeams.push(entry);
+      else if (alliance === "blue") blueTeams.push(entry);
+    }
+
+    if (redTeams.length === 3 && blueTeams.length === 3) {
+      const [redRes, blueRes] = await Promise.all([
+        runVideoMethodForAlliance({
+          allianceTeams: redTeams,
+          scoreTimeline: videoScore.redScoreTimeline || [],
+          matchNumber: m,
+        }),
+        runVideoMethodForAlliance({
+          allianceTeams: blueTeams,
+          scoreTimeline: videoScore.blueScoreTimeline || [],
+          matchNumber: m,
+        }),
+      ]);
+
+      return [...redRes, ...blueRes].map((r) => {
+        const autoFuel = roundFuel(r.autoFuel);
+        const teleFuel = roundFuel(r.teleFuel);
+        return {
+          ...r,
+          autoFuel,
+          teleFuel,
+          totalFuel: autoFuel + teleFuel,
+        };
+      });
+    }
+  }
+
+  // -------- Basic fallback --------
+  const teams = new Set([...timerByTeam.keys(), ...fuelByTeam.keys()]);
+  const results = [];
+
+  for (const team of teams) {
+    const tDoc = timerByTeam.get(team);
+    const fDoc = fuelByTeam.get(team);
+    if (!tDoc || !fDoc) continue;
+
+    const allianceRaw = String(tDoc.alliance ?? "").trim().toLowerCase();
+    const alliance = allianceRaw === "blue" ? "blue" : allianceRaw === "red" ? "red" : "";
+
+    const bursts = Array.isArray(fDoc.bursts) ? fDoc.bursts : [];
+    const avgBps = averageBpsFromBursts(bursts);
+
+    const rawTimes = Array.isArray(tDoc.shootingTimes) ? tDoc.shootingTimes : [];
+    const merged = cleanAndMergeShootingTimes(rawTimes);
+    const adjusted = adjustForScouterDelay(merged);
+
+    const { autoTime, teleTime } = sumAutoTeleTimeFromAdjustedTimes(adjusted);
+
+    const autoFuel = avgBps * autoTime;
+    const teleFuel = avgBps * teleTime;
+
+    const shootingTime = adjusted.reduce((s, x) => s + (x.duration || 0), 0);
+
+    const autoFuelRounded = roundFuel(autoFuel);
+    const teleFuelRounded = roundFuel(teleFuel);
+
+    results.push({
+      team: Number(team),
+      match: Number(m),
+      alliance, 
+      autoFuel: autoFuelRounded,
+      teleFuel: teleFuelRounded,
+      totalFuel: autoFuelRounded + teleFuelRounded,
+      ballsPerSec: avgBps,
+      shootingTime,
+      confidence: -1,
+      method: "basic",
+    });
+  }
+
   return results;
 }
 
-/**
- * Calculates fuelScored for all teams in a given match
- * @param {number} matchNumber - The match number to calculate fuel for
- * @returns {Promise<Array<{team: number, match: number, autoFuel: number, teleFuel: number, method: string}>>}
- */
-export default async function calculateFuelScored(matchNumber) {
-  try {
-    console.log("Starting fuel calculation for match:", matchNumber);
-    
-    // Query videoScoreData - docs are named by match number (e.g., "1")
-    const videoDocRef = doc(firebase, "videoScoreData", String(matchNumber));
-    console.log("Getting videoScoreData doc:", matchNumber);
-    const videoDoc = await getDoc(videoDocRef);
-    console.log("videoScoreData exists:", videoDoc.exists());
-    
-    // Query timerScoutData - docs are named as "team_match" (e.g., "1768_1")
-    // Get all docs first to debug
-    const allTimerDocs = await getDocs(collection(firebase, "timerScoutData"));
-    console.log("All timerScoutData getDocs result:", allTimerDocs);
-    console.log("All timerScoutData docs:", allTimerDocs.docs.map(d => d.id));
-    console.log("All timerScoutData size:", allTimerDocs.size);
-    
-    // Filter to only docs that end with "_matchNumber"
-    console.log("matchNumber:", matchNumber, "type:", typeof matchNumber);
-    console.log("Testing filter: '1768_1'.endsWith('_' + matchNumber):", '1768_1'.endsWith('_' + matchNumber));
-    const timerScoutData = allTimerDocs.docs
-      .filter(d => {
-        const result = d.id.endsWith("_" + matchNumber);
-        console.log("Doc ID:", d.id, "matches:", result);
-        return result;
-      })
-      .map(d => ({ id: d.id, ...d.data() }));
-    console.log("Filtered timerScoutData for match " + matchNumber + ":", timerScoutData);
-    
-    // Check if we can use Video Method (need all 6 teams)
-    if (videoDoc.exists() && timerScoutData.length === 6) {
-      console.log("Using Video Method");
-      const videoData = { id: videoDoc.id, ...videoDoc.data() };
-      console.log("videoData:", videoData);
-      return calculateWithVideoMethod(videoData, timerScoutData);
-    }
-    
-    console.log("Cannot use Video Method, checking for Basic Method");
-    console.log("videoDoc exists:", videoDoc.exists());
-    console.log("timerScoutData.length:", timerScoutData.length);
-    
-    // Fall back to Basic Method
-    // Query fuelScoutData - docs are named as "team_match"
-    const allFuelDocs = await getDocs(collection(firebase, "fuelScoutData"));
-    console.log("All fuelScoutData getDocs result:", allFuelDocs);
-    console.log("All fuelScoutData docs:", allFuelDocs.docs.map(d => d.id));
-    console.log("All fuelScoutData size:", allFuelDocs.size);
-    
-    // Filter to only docs that end with "_matchNumber"
-    const fuelScoutData = allFuelDocs.docs
-      .filter(d => d.id.endsWith("_" + matchNumber))
-      .map(d => ({ id: d.id, ...d.data() }));
-    console.log("Filtered fuelScoutData for match " + matchNumber + ":", fuelScoutData);
-    
-    return calculateWithBasicMethod(fuelScoutData, timerScoutData, matchNumber);
-    
-  } catch (error) {
-    console.error("Error calculating fuel scored:", error);
-    throw error;
-  }
-}
+// DEFAULT export so your Home.js can do:
+// import calculateFuelScored from "../FuelCalculator";
+export default calculateFuelScored;
