@@ -5,9 +5,15 @@ import { CssBaseline, ThemeProvider } from "@mui/material";
 import { theme } from "./Theme";
 import { Constants } from "./Constants";
 import Header from "./components/Header";
-import './firebase.js';
+import { fuelListener } from "./components/UpdateMatchData";
+import "./firebase.js";
 
 export default function App() {
+  // Enable the fuel listener - runs automatically in background when app is open
+  useEffect(() => {
+    const unsubscribe = fuelListener();
+    return () => unsubscribe();
+  }, []);
 
   return (
     <>
@@ -17,7 +23,11 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             {Constants.pages.map((page) => (
-              <Route key={page.path} path={page.path} element={<page.component />} />
+              <Route
+                key={page.path}
+                path={page.path}
+                element={<page.component />}
+              />
             ))}
             <Route path="*" element={<NotFound />} />
           </Routes>

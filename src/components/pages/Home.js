@@ -2,7 +2,8 @@ import React from "react";
 import { Box, Stack, Typography, Button, useMediaQuery } from "@mui/material";
 import { Constants } from "../../Constants";
 import bgImage from "../../assets/backGround.png";
-import calculateFuelScored from "../FuelCalculatorFinal";
+import calculateFuelScored from "../FuelCalculator";
+import updateMatchData from "../UpdateMatchData";
 
 
 export default function Home() {
@@ -129,6 +130,30 @@ export default function Home() {
                    }}
                >
                    Calculate Fuel
+               </Button>
+               <Button
+                   variant="contained"
+                   sx={{
+                       backgroundColor: "#1565C0",
+                       color: "white",
+                       borderRadius: "8px",
+                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
+                       py: 2,
+                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
+                       fontWeight: "bold",
+                       textTransform: "none",
+                       "&:hover": { backgroundColor: "#0D47A1" }
+                   }}
+                   onClick={async () => {
+                       try {
+                           updateMatchData();
+                           console.log("Successfully updated the match data.")
+                       } catch (error) {
+                           console.error("Error calculating fuel:", error);
+                       }
+                   }}
+               >
+                   Update Match Data
                </Button>
 
            </Stack>
