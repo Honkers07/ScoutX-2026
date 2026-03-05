@@ -61,9 +61,6 @@ export default function Home() {
                    X
                </Box>
            </Typography>
-
-
-          
            <Typography
                variant={isSmallScreen ? "h5" : "h3"}
                sx={{
@@ -96,8 +93,8 @@ export default function Home() {
 
 
 
-         
-           <Stack direction="row" spacing={2} sx={{ position: "absolute",
+        <Stack direction="column" spacing={12}>        
+            <Stack direction="row" spacing={2} sx={{ position: "absolute",
                     top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
                     left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
                    mt: 4 }}>
@@ -106,10 +103,15 @@ export default function Home() {
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
                {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
                {renderScoutButton('/credits', "Credits", isSmallScreen)}
+            </Stack>
+            <Stack direction="row" spacing={2} sx={{ position: "absolute",
+                    top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
+                    left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
+                   mt: 4 }}>
                <Button
                    variant="contained"
                    sx={{
-                       backgroundColor: "#1565C0",
+                       backgroundColor: "#665e5eff",
                        color: "white",
                        borderRadius: "8px",
                        px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
@@ -117,7 +119,7 @@ export default function Home() {
                        fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
                        fontWeight: "bold",
                        textTransform: "none",
-                       "&:hover": { backgroundColor: "#0D47A1" }
+                       "&:hover": { backgroundColor: "#4e5053ff" }
                    }}
                    onClick={async () => {
                        try {
@@ -134,7 +136,7 @@ export default function Home() {
                <Button
                    variant="contained"
                    sx={{
-                       backgroundColor: "#1565C0",
+                       backgroundColor: "#665e5eff",
                        color: "white",
                        borderRadius: "8px",
                        px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
@@ -142,7 +144,7 @@ export default function Home() {
                        fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
                        fontWeight: "bold",
                        textTransform: "none",
-                       "&:hover": { backgroundColor: "#0D47A1" }
+                       "&:hover": { backgroundColor: "#4e5053ff" }
                    }}
                    onClick={async () => {
                        try {
@@ -156,6 +158,7 @@ export default function Home() {
                    Update Match Data
                </Button>
 
+           </Stack>
            </Stack>
        </Box>
    );
