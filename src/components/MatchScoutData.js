@@ -18,6 +18,7 @@ const defaultData = [
         match: '',
         name: '',
         alliance: '',
+        start_position: '',
     },
     {
         autostage: MatchStage.AUTO,
@@ -360,6 +361,7 @@ export default class MatchScoutData {
                             this.data[0]['match'] === '' || 
                             this.data[0]['name'] === '' ||
                             this.data[0]['alliance'] === '' ||
+                            this.data[0]['start_position'] === '' ||
                             this.data[0]['verificationCode'] === ''; 
 
         if (isIncomplete && this.data[0]['verificationCode'] !== process.env.REACT_APP_VERIFICATION_CODE) {

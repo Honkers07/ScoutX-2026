@@ -106,6 +106,25 @@ function FuelPrematch({ data }) {
                     <option value="Red" style={{color: 'white', backgroundColor: '#333'}}>Red</option>
                 </TextField>
             </Grid2>
+            <Grid2 xs={12} sm={6}>
+                <TextField
+                    select
+                    label="Start Position"
+                    value={data.get(MatchStage.PRE_MATCH, "start_position")}
+                    onChange={(e) => {
+                        data.set(MatchStage.PRE_MATCH, "start_position", e.target.value);
+                        update();
+                    }}
+                    fullWidth
+                    sx={inputStyle}
+                    SelectProps={{ native: true }}
+                >
+                    <option value="" style={{color: 'white', backgroundColor: '#333'}}>Start Position</option>
+                    <option value="Near Processor Side" style={{color: 'white', backgroundColor: '#333'}}>Near Processor Side</option>
+                    <option value="Middle" style={{color: 'white', backgroundColor: '#333'}}>Middle</option>
+                    <option value="Far Processor Side" style={{color: 'white', backgroundColor: '#333'}}>Far Processor Side</option>
+                </TextField>
+            </Grid2>
         </Grid2>
     );
 }
@@ -533,6 +552,7 @@ export default function FuelScout() {
                                     const name = data.get(MatchStage.PRE_MATCH, "name");
                                     const verificationCode = data.get(MatchStage.PRE_MATCH, "verificationCode");
                                     const alliance = data.get(MatchStage.PRE_MATCH, "alliance");
+                                    const start_position = data.get(MatchStage.PRE_MATCH, "start_position");
                                     const comments = data.get(MatchStage.POST_MATCH, "comments");
                                     
                                     // Get post match data
@@ -553,6 +573,7 @@ export default function FuelScout() {
                                             name,
                                             verificationCode,
                                             alliance,
+                                            start_position,
                                             comments,
                                             fuelScored,
                                             totalFuel: fuelScored.reduce((sum, val) => sum + val, 0),
