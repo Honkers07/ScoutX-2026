@@ -1254,12 +1254,21 @@ export default function TimerPage() {
                                     // Filter to only keep values within the valid match window (0-163 seconds)
                                     const MATCH_DURATION = 163;
                                     const relativeShootingTimes = shootingTimes
+                                        // First filter: keep only times that overlap with the crop window (0 to MATCH_DURATION)
+                                        .filter(time => {
+                                            const timeStart = time.startShootTime;
+                                            const timeEnd = time.endShootTime;
+                                            const windowStart = cropStart;
+                                            const windowEnd = cropStart + MATCH_DURATION;
+                                            // Keep if the shooting time overlaps with the crop window
+                                            return timeEnd > windowStart && timeStart < windowEnd;
+                                        })
+                                        // Then map to relative times (0-163 seconds)
                                         .map(time => ({
                                             startShootTime: Math.max(0, time.startShootTime - cropStart),
                                             endShootTime: Math.max(0, time.endShootTime - cropStart),
                                             duration: time.duration
-                                        }))
-                                        .filter(time => time.startShootTime >= 0 && time.endShootTime <= MATCH_DURATION);
+                                        }));
                                     
                                     try {
                                         await setDoc(doc(firebase, "timerScoutData", team + "_" + matchNum), {
