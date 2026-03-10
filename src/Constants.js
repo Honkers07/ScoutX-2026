@@ -67,17 +67,17 @@ export const Constants = {
 
    developers: [
        {
-           name: "Eric Jacobson",
-           year: "Scouting App Lead - 2nd Year",
-           icon: require("./assets/field.png"),
+           name: "Jacob Ericson",
+           year: "Scouting App Lead - 1st Year",
+           icon: require("./assets/jacob.jpeg"),
        },
        {
            name: "Maxwell Tan",
-           year: "Developer - 1st Year",
+           year: "Developer - 4th Year",
            icon: require("./assets/field.png"),
        },
        {
-           name: "William Han",
+           name: "Willy Han",
            year: "Developer - 2nd Year",
            icon: require("./assets/field.png"),
        },
@@ -132,6 +132,14 @@ export const Constants = {
                "Ashir Rao",
                "Tyrus Chung"
            ]
+       },
+       {
+            year: "2025",
+            developers: [
+                "Maxwell Tan",
+                "Jacob Ericson",
+                "Big Willy"
+            ]
        }
    ],
 }
