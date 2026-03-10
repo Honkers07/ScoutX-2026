@@ -6,6 +6,7 @@ import Analytics from "./components/pages/DataVisualization/Analytics";
 import DataVisualizationDisplay from "./components/pages/DataVisualization/DataVisualizationDisplay"
 import TimerPage from "./components/pages/TimerPage";
 import FuelScout from "./components/pages/FuelScout";
+import FlappyBird3D from "./components/pages/FlappyBird";
 
 
 export const Constants = {
@@ -42,6 +43,11 @@ export const Constants = {
             path: "/fuelscout",
             component: FuelScout,
         },
+        {
+            title: "FLAPPY BIRD",
+            path: "/flappybird",
+            component: FlappyBird3D,
+        }
     ],
 
 

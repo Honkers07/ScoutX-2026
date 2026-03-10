@@ -103,6 +103,7 @@ export default function Home() {
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
                {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
                {renderScoutButton('/credits', "Credits", isSmallScreen)}
+               {renderScoutButton('/flappybird', "FLAPPY BIRD")}
             </Stack>
             <Stack direction="row" spacing={2} sx={{ position: "absolute",
                     top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
