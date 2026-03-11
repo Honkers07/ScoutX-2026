@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
+import creditsImg from "../../assets/jacob.jpeg";
 
 // ── Logical canvas size (landscape) ─────────────────────────────────────────
 const W = 900, H = 500;
@@ -33,6 +34,14 @@ export default function FlappyBird() {
   const stateRef   = useRef("idle");
   const gameRef    = useRef(null);
   const rafRef     = useRef(null);
+  const spriteRef  = useRef(null);
+
+  // preload algae sprite
+  useEffect(() => {
+    const img = new Image();
+    img.src = creditsImg;
+    img.onload = () => { spriteRef.current = img; };
+  }, []);
 
   const [displayScore, setDisplayScore] = useState(0);
   const [displayBest,  setDisplayBest]  = useState(0);
@@ -280,62 +289,42 @@ export default function FlappyBird() {
     ctx.shadowBlur = 0;
   }
 
-  function drawBird(ctx, bird, frame) {
-    const { x, y, angle, trail, wingAngle } = bird;
+  function drawBird(ctx, bird) {
+    const { x, y, angle, trail } = bird;
+    const SIZE = 36; // half-size of sprite drawn
 
+    // neon green glow trail
     trail.forEach((t, i) => {
-      const a = (i / trail.length) * 0.32;
-      const r = 9  * (i / trail.length);
-      ctx.fillStyle = `hsla(280,100%,70%,${a})`;
-      ctx.beginPath(); ctx.arc(t.x, t.y, r, 0, Math.PI*2); ctx.fill();
+      const a = (i / trail.length) * 0.4;
+      const r = 10 * (i / trail.length);
+      ctx.fillStyle = `hsla(140,100%,65%,${a})`;
+      ctx.beginPath(); ctx.arc(t.x, t.y, r, 0, Math.PI * 2); ctx.fill();
     });
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
 
-    const aura = ctx.createRadialGradient(0, 0, 4, 0, 0, 26);
-    aura.addColorStop(0,   "rgba(255,255,100,0.45)");
-    aura.addColorStop(0.5, "rgba(255,80,255,0.18)");
+    // outer glow aura
+    const aura = ctx.createRadialGradient(0, 0, 4, 0, 0, SIZE + 10);
+    aura.addColorStop(0,   "rgba(100,255,160,0.5)");
+    aura.addColorStop(0.5, "rgba(50,255,120,0.2)");
     aura.addColorStop(1,   "transparent");
     ctx.fillStyle = aura;
-    ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, SIZE + 10, 0, Math.PI * 2); ctx.fill();
 
-    ctx.shadowColor = "#ffe000"; ctx.shadowBlur = 22;
-    const bodyGrad = ctx.createRadialGradient(-4, -4, 2, 0, 0, 17);
-    bodyGrad.addColorStop(0,   "#fff176");
-    bodyGrad.addColorStop(0.5, "#ffe000");
-    bodyGrad.addColorStop(1,   "#e6a800");
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath(); ctx.ellipse(0, 0, 17, 13, 0, 0, Math.PI*2); ctx.fill();
-
-    const belly = ctx.createRadialGradient(2, 1, 0, 2, 2, 10);
-    belly.addColorStop(0, "rgba(255,255,220,0.55)"); belly.addColorStop(1, "transparent");
-    ctx.fillStyle = belly;
-    ctx.beginPath(); ctx.ellipse(3, 2, 8, 6, 0.15, 0, Math.PI*2); ctx.fill();
-
-    ctx.save();
-    ctx.rotate(wingAngle);
-    ctx.fillStyle = "#ffaa00"; ctx.shadowColor = "#ff8800"; ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.ellipse(-5, 4, 9, 5, -0.3, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-    ctx.shadowBlur = 0;
-    const eyeG = ctx.createRadialGradient(5, -4.5, 0.5, 7, -3, 5);
-    eyeG.addColorStop(0, "#444"); eyeG.addColorStop(1, "#111");
-    ctx.fillStyle = eyeG;
-    ctx.beginPath(); ctx.arc(7, -3, 4.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.beginPath(); ctx.arc(8.2, -4.2, 1.6, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "#00ffff"; ctx.shadowColor = "#00ffff"; ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.arc(7.5, -3.5, 1.1, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = "#cc5500";
-    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(20, 1.5); ctx.lineTo(14, 4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#ff8800"; ctx.shadowColor = "#ff6600"; ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.moveTo(12, -2); ctx.lineTo(20, 1.5); ctx.lineTo(13, 1); ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
+    // draw sprite image (or fallback circle if not loaded yet)
+    if (spriteRef.current) {
+      ctx.shadowColor = "#00ff88";
+      ctx.shadowBlur  = 18;
+      ctx.drawImage(spriteRef.current, -SIZE, -SIZE, SIZE * 2, SIZE * 2);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.shadowColor = "#00ff88"; ctx.shadowBlur = 18;
+      ctx.fillStyle = "#6eff9e";
+      ctx.beginPath(); ctx.arc(0, 0, SIZE * 0.75, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
   }
@@ -428,7 +417,7 @@ export default function FlappyBird() {
       <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
 
       <div ref={wrapRef} style={styles.wrapper}>
-        <canvas ref={canvasRef} width={W} height={H} style={styles.canvas} />
+        <canvas ref={canvasRef} width={W} height={H} style={styles.canvas} onClick={flap} />
 
         {screen === "playing" && (
           <div style={styles.hud} onClick={flap}>
