@@ -37,7 +37,7 @@ let HISTORICAL_AVERAGING = {
 };
 
 let SCOUTER_DELAY = {
-  START: 0,
+  START: .5,
   END: 0,
 };
 
@@ -50,8 +50,8 @@ let DATA_FILTERING = {
 
 let SCOREBOARD = {
   START: 0,
-  END: 4,
-  RATE: 0.05,
+  END: 5,
+  RATE: 0.1,
 };
 
 // Export function to set constants (for tuning)

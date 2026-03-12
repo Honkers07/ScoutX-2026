@@ -103,9 +103,9 @@ export async function tuneFuelCalculator(
         END: constants.SCOUTER_DELAY_END,
       },
       SCOREBOARD: {
-        START: constants.SCOUTERBOARD_START,
-        END: constants.SCOUTERBOARD_END,
-        RATE: constants.SCOUTERBOARD_RATE,
+        START: constants.SCOREBOARD_START,
+        END: constants.SCOREBOARD_END,
+        RATE: constants.SCOREBOARD_RATE,
       },
     });
 
@@ -165,7 +165,7 @@ export async function tuneFuelCalculator(
           `   SCOUTER_DELAY: START=${constants.SCOUTER_DELAY_START}, END=${constants.SCOUTER_DELAY_END}`
         );
         console.log(
-          `   SCOREBOARD: START=${constants.SCOUTERBOARD_START}, END=${constants.SCOUTERBOARD_END}, RATE=${constants.SCOUTERBOARD_RATE}`
+          `   SCOREBOARD: START=${constants.SCOREBOARD_START}, END=${constants.SCOREBOARD_END}, RATE=${constants.SCOREBOARD_RATE}`
         );
         console.log("----------------------------------------");
       }
@@ -203,7 +203,7 @@ export async function tuneFuelCalculator(
     `  SCOUTER_DELAY: START=${bestConstants.SCOUTER_DELAY_START}, END=${bestConstants.SCOUTER_DELAY_END}`
   );
   console.log(
-    `  SCOREBOARD: START=${bestConstants.SCOUTERBOARD_START}, END=${bestConstants.SCOUTERBOARD_END}, RATE=${bestConstants.SCOUTERBOARD_RATE}`
+    `  SCOREBOARD: START=${bestConstants.SCOREBOARD_START}, END=${bestConstants.SCOREBOARD_END}, RATE=${bestConstants.SCOREBOARD_RATE}`
   );
   console.log("----------------------------------------");
   console.log("RESULT DETAILS:");
@@ -255,9 +255,9 @@ function generateCombinations() {
             combinations.push({
               SCOUTER_DELAY_START,
               SCOUTER_DELAY_END,
-              SCOUTERBOARD_START: SCOREBOARD_START,
-              SCOUTERBOARD_END: SCOREBOARD_END,
-              SCOUTERBOARD_RATE: SCOREBOARD_RATE,
+              SCOREBOARD_START,
+              SCOREBOARD_END,
+              SCOREBOARD_RATE,
             });
           }
         }
