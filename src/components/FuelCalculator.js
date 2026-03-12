@@ -1,10 +1,17 @@
 // FuelCalculatorFinal.js - Combined implementation of FuelCalculatorKILO and FuelCalculatorGPT
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import firebase from '../firebase';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import firebase from "../firebase";
 
 // ----------------------------- Constants -----------------------------
 
-const MATCH_TIMING = {
+let MATCH_TIMING = {
   AUTO_END: 20,
   TRANSITION_SHIFT_END: 23,
   TRANSITION_END: 33,
@@ -16,36 +23,67 @@ const MATCH_TIMING = {
   TOTAL_DURATION: 163,
 };
 
-const CONFIDENCE = {
+let CONFIDENCE = {
   DECAY_CONSTANT: 0.1,
   MAX_CONFIDENCE: 1.0,
   LOW_CONFIDENCE_THRESHOLD: 0.3,
 };
 
-const HISTORICAL_AVERAGING = {
+let HISTORICAL_AVERAGING = {
   LOW_CONFIDENCE_THRESHOLD: 0.3,
   DECAY_RATE: 0.8,
   MIN_HISTORICAL_MATCHES: 1,
   MAX_MATCHES_TO_LOOK_BACK: 12,
 };
 
-const SCOUTER_DELAY = {
-  START: 1.0,
-  END: 2.0,
+let SCOUTER_DELAY = {
+  START: 0,
+  END: 0,
 };
 
-const DATA_FILTERING = {
+let DATA_FILTERING = {
   MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START, // 1.0s
   SHOOTING_TIME_MERGE_THRESHOLD: 1.5,
   MIN_SCORE_INCREMENT: 1,
-  MAX_SCORE_INCREMENT: 4,
+  MAX_SCORE_INCREMENT: 20,
 };
 
-const SCOREBOARD = {
-  START: 1.5,
-  END: 2.2,
+let SCOREBOARD = {
+  START: 0,
+  END: 4,
   RATE: 0.05,
 };
+
+// Export function to set constants (for tuning)
+export function setConstants(newConstants) {
+  if (newConstants.MATCH_TIMING)
+    MATCH_TIMING = { ...MATCH_TIMING, ...newConstants.MATCH_TIMING };
+  if (newConstants.CONFIDENCE)
+    CONFIDENCE = { ...CONFIDENCE, ...newConstants.CONFIDENCE };
+  if (newConstants.HISTORICAL_AVERAGING)
+    HISTORICAL_AVERAGING = {
+      ...HISTORICAL_AVERAGING,
+      ...newConstants.HISTORICAL_AVERAGING,
+    };
+  if (newConstants.SCOUTER_DELAY)
+    SCOUTER_DELAY = { ...SCOUTER_DELAY, ...newConstants.SCOUTER_DELAY };
+  if (newConstants.DATA_FILTERING)
+    DATA_FILTERING = { ...DATA_FILTERING, ...newConstants.DATA_FILTERING };
+  if (newConstants.SCOREBOARD)
+    SCOREBOARD = { ...SCOREBOARD, ...newConstants.SCOREBOARD };
+}
+
+// Export function to get current constants
+export function getConstants() {
+  return {
+    MATCH_TIMING,
+    CONFIDENCE,
+    HISTORICAL_AVERAGING,
+    SCOUTER_DELAY,
+    DATA_FILTERING,
+    SCOREBOARD,
+  };
+}
 
 // ----------------------------- Small helpers -----------------------------
 
@@ -61,7 +99,8 @@ function overlapDuration(aStart, aEnd, bStart, bEnd) {
 }
 
 function splitAutoTeleByTime(time, value) {
-  if (time <= MATCH_TIMING.TRANSITION_SHIFT_END) return { auto: value, tele: 0 };
+  if (time <= MATCH_TIMING.TRANSITION_SHIFT_END)
+    return { auto: value, tele: 0 };
   return { auto: 0, tele: value };
 }
 
@@ -153,7 +192,8 @@ export function adjustForScouterDelay(shootingTimes) {
 
 export function cropToActiveHub(shootingTimes, hubActivePeriods) {
   if (!Array.isArray(shootingTimes) || shootingTimes.length === 0) return [];
-  if (!Array.isArray(hubActivePeriods) || hubActivePeriods.length === 0) return [];
+  if (!Array.isArray(hubActivePeriods) || hubActivePeriods.length === 0)
+    return [];
 
   const cropped = [];
   for (const time of shootingTimes) {
@@ -227,7 +267,8 @@ export function findExclusiveAndMultipleShootingTimes(robotTimes) {
     const t = all[i];
     if (t.start <= current.end) {
       current.end = Math.max(current.end, t.end);
-      if (!current.robots.includes(t.robotIndex)) current.robots.push(t.robotIndex);
+      if (!current.robots.includes(t.robotIndex))
+        current.robots.push(t.robotIndex);
     } else {
       segments.push(current);
       current = { start: t.start, end: t.end, robots: [t.robotIndex] };
@@ -247,7 +288,7 @@ export function findExclusiveAndMultipleShootingTimes(robotTimes) {
 export function createScoreboardOffset(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return [];
   return segments.map((seg) => {
-    const duration = Number(seg.duration ?? (seg.end - seg.start));
+    const duration = Number(seg.duration ?? seg.end - seg.start);
     return {
       start: seg.start + SCOREBOARD.START,
       end: seg.end + SCOREBOARD.END + duration * SCOREBOARD.RATE,
@@ -262,7 +303,9 @@ export function createScoreboardOffset(segments) {
 
 export function resolveOverlaps(offsetSegments) {
   if (!Array.isArray(offsetSegments) || offsetSegments.length === 0) return [];
-  const sorted = [...offsetSegments].sort((a, b) => a.originalStart - b.originalStart);
+  const sorted = [...offsetSegments].sort(
+    (a, b) => a.originalStart - b.originalStart
+  );
 
   const resolved = [{ ...sorted[0] }];
   for (let i = 1; i < sorted.length; i++) {
@@ -306,8 +349,11 @@ export function estimateBallPerSecond(
 
   if (confC >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD) return bpsC;
 
-  const historical = (matchDataTeams || []).filter((t) => t.teamNumber === teamNumber);
-  if (historical.length < HISTORICAL_AVERAGING.MIN_HISTORICAL_MATCHES) return bpsC;
+  const historical = (matchDataTeams || []).filter(
+    (t) => t.teamNumber === teamNumber
+  );
+  if (historical.length < HISTORICAL_AVERAGING.MIN_HISTORICAL_MATCHES)
+    return bpsC;
 
   let weightedSum = bpsC * confC;
   let weightSum = confC;
@@ -335,8 +381,20 @@ function getAutoFuelFromTimeline(scoreTimeline) {
 }
 
 function determineAutoWinner(videoScoreDoc) {
-  const redAuto = getAutoFuelFromTimeline(videoScoreDoc?.redScoreTimeline || []);
-  const blueAuto = getAutoFuelFromTimeline(videoScoreDoc?.blueScoreTimeline || []);
+  // TEMPORARY FIX FOR MATCH 43 - assume blue won
+  if (
+    videoScoreDoc?.matchNumber === 43 ||
+    videoScoreDoc?.matchNumber === "43"
+  ) {
+    return "blue";
+  }
+
+  const redAuto = getAutoFuelFromTimeline(
+    videoScoreDoc?.redScoreTimeline || []
+  );
+  const blueAuto = getAutoFuelFromTimeline(
+    videoScoreDoc?.blueScoreTimeline || []
+  );
   if (redAuto > blueAuto) return "red";
   if (blueAuto > redAuto) return "blue";
   return "tie";
@@ -347,7 +405,10 @@ function getHubActivePeriods(alliance, autoWinner) {
 
   // BOTH ACTIVE: AUTO, TRANSITION SHIFT, TRANSITION, END GAME
   periods.push({ start: 0, end: MATCH_TIMING.TRANSITION_END });
-  periods.push({ start: MATCH_TIMING.SHIFT4_END, end: MATCH_TIMING.END_GAME_END });
+  periods.push({
+    start: MATCH_TIMING.SHIFT4_END,
+    end: MATCH_TIMING.END_GAME_END,
+  });
 
   // Alternating shifts
   const shifts = [
@@ -360,8 +421,14 @@ function getHubActivePeriods(alliance, autoWinner) {
   const shift1ActiveAlliance = autoWinner === "red" ? "blue" : "red";
 
   shifts.forEach((sh, idx) => {
-    const activeAlliance = idx % 2 === 0 ? shift1ActiveAlliance : (autoWinner === "tie" ? "blue" : autoWinner);
-    if (alliance === activeAlliance) periods.push({ start: sh.start, end: sh.end });
+    const activeAlliance =
+      idx % 2 === 0
+        ? shift1ActiveAlliance
+        : autoWinner === "tie"
+        ? "blue"
+        : autoWinner;
+    if (alliance === activeAlliance)
+      periods.push({ start: sh.start, end: sh.end });
   });
 
   return periods;
@@ -397,7 +464,10 @@ async function getFuelScoutData(matchNumber) {
   const sMatch = await getDocs(qMatch);
   if (!sMatch.empty) return sMatch.docs.map((d) => d.data());
 
-  const qMatchNumber = query(c, where("matchNumber", "==", String(matchNumber)));
+  const qMatchNumber = query(
+    c,
+    where("matchNumber", "==", String(matchNumber))
+  );
   const sMatchNumber = await getDocs(qMatchNumber);
   return sMatchNumber.docs.map((d) => d.data());
 }
@@ -418,7 +488,9 @@ async function getMatchDataHistory(matchNumber, teamNumber) {
   for (const doc of snap.docs) {
     const data = doc.data();
     const teams = Array.isArray(data?.teams) ? data.teams : [];
-    const entry = teams.find((t) => Number(t.teamNumber) === Number(teamNumber));
+    const entry = teams.find(
+      (t) => Number(t.teamNumber) === Number(teamNumber)
+    );
     if (!entry) continue;
     ago += 1;
     out.push({
@@ -537,7 +609,11 @@ function distributeMultipleSegmentFuel({
 
 // ----------------------------- Video Method (per alliance) -----------------------------
 
-async function runVideoMethodForAlliance({ allianceTeams, scoreTimeline, matchNumber }) {
+async function runVideoMethodForAlliance({
+  allianceTeams,
+  scoreTimeline,
+  matchNumber,
+}) {
   const robotTimes = allianceTeams.map((t) => t.shootingTimesAdjustedCropped);
 
   const segments = findExclusiveAndMultipleShootingTimes(robotTimes);
@@ -585,7 +661,8 @@ async function runVideoMethodForAlliance({ allianceTeams, scoreTimeline, matchNu
   // Get historical data for low confidence teams
   const histories = await Promise.all(
     allianceTeams.map(async (t, idx) => {
-      if (confidence[idx] >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD) return [];
+      if (confidence[idx] >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD)
+        return [];
       return getMatchDataHistory(matchNumber, t.teamNumber);
     })
   );
@@ -593,7 +670,12 @@ async function runVideoMethodForAlliance({ allianceTeams, scoreTimeline, matchNu
   // Apply historical averaging for low confidence
   for (let i = 0; i < allianceTeams.length; i++) {
     const teamNumber = allianceTeams[i].teamNumber;
-    bps[i] = estimateBallPerSecond(rawBps[i], confidence[i], histories[i], teamNumber);
+    bps[i] = estimateBallPerSecond(
+      rawBps[i],
+      confidence[i],
+      histories[i],
+      teamNumber
+    );
   }
 
   const addFuel = (robotIdx, autoAdd, teleAdd) => {
@@ -672,7 +754,12 @@ function sumAutoTeleTimeFromAdjustedTimes(adjustedTimes) {
     if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
 
     autoTime += overlapDuration(s, e, 0, MATCH_TIMING.AUTO_END);
-    teleTime += overlapDuration(s, e, MATCH_TIMING.AUTO_END, MATCH_TIMING.END_GAME_END);
+    teleTime += overlapDuration(
+      s,
+      e,
+      MATCH_TIMING.AUTO_END,
+      MATCH_TIMING.END_GAME_END
+    );
   }
 
   return { autoTime, teleTime };
@@ -682,7 +769,8 @@ function sumAutoTeleTimeFromAdjustedTimes(adjustedTimes) {
 
 export async function calculateFuelScored(matchNumber) {
   const m = Number(matchNumber);
-  if (!Number.isFinite(m)) throw new Error("calculateFuelScored: matchNumber must be a number");
+  if (!Number.isFinite(m))
+    throw new Error("calculateFuelScored: matchNumber must be a number");
 
   const videoScore = await getVideoScoreData(m);
   const timerDocs = await getTimerScoutData(m);
@@ -729,19 +817,31 @@ export async function calculateFuelScored(matchNumber) {
 
     for (const [, doc] of timerByTeam.entries()) {
       const teamNumber = Number(doc.team ?? doc.teamNumber);
-      const allianceRaw = String(doc.alliance ?? "").trim().toLowerCase();
+      const allianceRaw = String(doc.alliance ?? "")
+        .trim()
+        .toLowerCase();
       const alliance =
         allianceRaw === "blue" ? "blue" : allianceRaw === "red" ? "red" : "";
 
-      const rawTimes = Array.isArray(doc.shootingTimes) ? doc.shootingTimes : [];
+      const rawTimes = Array.isArray(doc.shootingTimes)
+        ? doc.shootingTimes
+        : [];
       const merged = cleanAndMergeShootingTimes(rawTimes);
       const adjusted = adjustForScouterDelay(merged);
 
       const periods =
-        alliance === "red" ? redPeriods : alliance === "blue" ? bluePeriods : null;
+        alliance === "red"
+          ? redPeriods
+          : alliance === "blue"
+          ? bluePeriods
+          : null;
       const cropped = periods ? cropToActiveHub(adjusted, periods) : [];
 
-      const entry = { teamNumber, alliance, shootingTimesAdjustedCropped: cropped };
+      const entry = {
+        teamNumber,
+        alliance,
+        shootingTimesAdjustedCropped: cropped,
+      };
       if (alliance === "red") redTeams.push(entry);
       else if (alliance === "blue") blueTeams.push(entry);
     }
@@ -782,13 +882,18 @@ export async function calculateFuelScored(matchNumber) {
     const fDoc = fuelByTeam.get(team);
     if (!tDoc || !fDoc) continue;
 
-    const allianceRaw = String(tDoc.alliance ?? "").trim().toLowerCase();
-    const alliance = allianceRaw === "blue" ? "blue" : allianceRaw === "red" ? "red" : "";
+    const allianceRaw = String(tDoc.alliance ?? "")
+      .trim()
+      .toLowerCase();
+    const alliance =
+      allianceRaw === "blue" ? "blue" : allianceRaw === "red" ? "red" : "";
 
     const bursts = Array.isArray(fDoc.bursts) ? fDoc.bursts : [];
     const avgBps = averageBpsFromBursts(bursts);
 
-    const rawTimes = Array.isArray(tDoc.shootingTimes) ? tDoc.shootingTimes : [];
+    const rawTimes = Array.isArray(tDoc.shootingTimes)
+      ? tDoc.shootingTimes
+      : [];
     const merged = cleanAndMergeShootingTimes(rawTimes);
     const adjusted = adjustForScouterDelay(merged);
 
