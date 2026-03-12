@@ -82,14 +82,19 @@ def process_video():
         
         video_file = request.files['video']
         
-        # Get crop coordinates
+        # Get crop coordinates and time range
         crop_x = int(request.form.get('cropX', 0))
         crop_y = int(request.form.get('cropY', 0))
         crop_width = int(request.form.get('cropWidth', 100))
         crop_height = int(request.form.get('cropHeight', 100))
         alliance = request.form.get('alliance', 'unknown')
         
+        # Get time range parameters
+        start_time = float(request.form.get('startTime', 0))
+        end_time = float(request.form.get('endTime', 0)) if request.form.get('endTime') else None
+        
         print(f"[API] Processing {alliance} video with crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
+        print(f"[API] Time range: start={start_time:.2f}s, end={end_time}s")
         
         # Save uploaded video to temp file
         temp_video_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}.mp4")
@@ -106,9 +111,9 @@ def process_video():
             
             print(f"[API] Video info: {total_frames} frames, {video_fps} fps, {video_duration:.1f}s duration")
             
-            # Step 1: Extract frames at 5fps
+            # Step 1: Extract frames at 5fps with time range
             print("[API] Step 1: Extracting frames at 5fps...")
-            frames = extract_frames_at_fps(temp_video_path, fps=5)
+            frames = extract_frames_at_fps(temp_video_path, fps=5, start_time=start_time, end_time=end_time)
             
             if not frames:
                 return jsonify({'error': 'Could not extract frames from video'}), 400
@@ -198,7 +203,12 @@ def process_video_stream():
             crop_height = int(request.form.get('cropHeight', 100))
             alliance = request.form.get('alliance', 'unknown')
             
+            # Get time range parameters
+            start_time = float(request.form.get('startTime', 0))
+            end_time = float(request.form.get('endTime', 0)) if request.form.get('endTime') else None
+            
             print(f"[API] Processing {alliance} video with crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
+            print(f"[API] Time range: start={start_time:.2f}s, end={end_time}s")
             
             # Save uploaded video to temp file
             temp_video_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}.mp4")
@@ -217,11 +227,11 @@ def process_video_stream():
                 
                 yield json.dumps({'status': 'starting', 'message': 'Starting video processing...'}) + '\n\n'
                 
-                # Step 1: Extract frames at 5fps
+                # Step 1: Extract frames at 5fps with time range
                 print("[API] Step 1: Extracting frames at 5fps...")
                 yield json.dumps({'status': 'extracting', 'message': 'Extracting frames...'}) + '\n\n'
                 
-                frames = extract_frames_at_fps(temp_video_path, fps=5)
+                frames = extract_frames_at_fps(temp_video_path, fps=5, start_time=start_time, end_time=end_time)
                 
                 if not frames:
                     yield json.dumps({'error': 'Could not extract frames from video'}) + '\n\n'

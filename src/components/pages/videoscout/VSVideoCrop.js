@@ -5,15 +5,29 @@ import {
   Button,
   Slider,
   Paper,
+  IconButton,
 } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CropIcon from "@mui/icons-material/Crop";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import PauseIcon from "@mui/icons-material/Pause";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
+
+// Default time crop duration in seconds (168 seconds = 2:48)
+const DEFAULT_TIME_DURATION = 168;
+
+// Helper function to format time with hundredths precision (MM:SS.xx)
+const formatTimePrecise = (seconds) => {
+  if (isNaN(seconds) || seconds < 0) seconds = 0;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toFixed(2).padStart(5, "0")}`;
+};
 
 export default function VSVideoCrop(props) {
   const { videoPreview, alliance, onConfirm, onBack } = props;
-
-  // Note: videoFile prop was removed as it was unused - only videoPreview is needed
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -34,6 +48,13 @@ export default function VSVideoCrop(props) {
   });
   const [canvasScale, setCanvasScale] = useState(1);
 
+  // Time range state for temporal cropping
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [startTime, setStartTime] = useState(0);
+  const [startTimeWhole, setStartTimeWhole] = useState(0); // Whole seconds (0, 1, 2, 3...)
+  const [startTimeFraction, setStartTimeFraction] = useState(0); // Hundredths (0.00 - 1.00)
+  const [isPlaying, setIsPlaying] = useState(false);
+
   const allianceColor = alliance === "red" ? "#ef5350" : "#42a5f5";
   const allianceLabel = alliance === "red" ? "Red Alliance" : "Blue Alliance";
 
@@ -45,6 +66,11 @@ export default function VSVideoCrop(props) {
           width: video.videoWidth,
           height: video.videoHeight,
         });
+        setVideoDuration(video.duration);
+        // Initialize start time to 0
+        setStartTime(0);
+        setStartTimeWhole(0);
+        setStartTimeFraction(0);
       };
 
       video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -183,6 +209,87 @@ export default function VSVideoCrop(props) {
     }));
   };
 
+  // Handle crop start time slider (whole seconds)
+  const handleStartTimeWholeChange = (event, newValue) => {
+    setStartTimeWhole(newValue);
+    // Update combined start time
+    const newStartTime = newValue + startTimeFraction;
+    setStartTime(newStartTime);
+    // Update video to play from this time
+    if (videoRef.current) {
+      videoRef.current.currentTime = newStartTime;
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Handle crop start time slider (fractional seconds - hundredths)
+  const handleStartTimeFractionChange = (event, newValue) => {
+    setStartTimeFraction(newValue);
+    // Update combined start time
+    const newStartTime = startTimeWhole + newValue;
+    setStartTime(newStartTime);
+    // Update video to play from this time
+    if (videoRef.current) {
+      videoRef.current.currentTime = newStartTime;
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Increment/decrement whole seconds by 1
+  const adjustWholeSeconds = (delta) => {
+    const maxWhole = Math.max(0, Math.floor(videoDuration - 1));
+    const newWhole = Math.max(0, Math.min(startTimeWhole + delta, maxWhole));
+    handleStartTimeWholeChange(null, newWhole);
+  };
+
+  // Increment/decrement hundredths by 0.01
+  const adjustHundredths = (delta) => {
+    const newFraction = Math.max(0, Math.min(startTimeFraction + delta, 0.99));
+    handleStartTimeFractionChange(null, newFraction);
+  };
+
+  // Toggle play/pause for preview
+  const togglePlayPause = () => {
+    const video = videoRef.current;
+    if (video) {
+      if (isPlaying) {
+        video.pause();
+      } else {
+        video.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  // Jump to crop start time
+  const jumpToCropStart = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = startTime;
+    }
+  };
+
+  // Update play state from video events
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      const handlePlay = () => setIsPlaying(true);
+      const handlePause = () => setIsPlaying(false);
+
+      video.addEventListener("play", handlePlay);
+      video.addEventListener("pause", handlePause);
+
+      return () => {
+        video.removeEventListener("play", handlePlay);
+        video.removeEventListener("pause", handlePause);
+      };
+    }
+  }, []);
+
+  // Calculate end time (start + 168 seconds, but not beyond video duration)
+  const endTime = Math.min(startTime + DEFAULT_TIME_DURATION, videoDuration);
+
   const handleConfirm = () => {
     // Validate video dimensions before calculating crop
     if (videoDimensions.width === 0 || videoDimensions.height === 0) {
@@ -192,14 +299,20 @@ export default function VSVideoCrop(props) {
       return;
     }
 
-    // Convert percentage to pixel values for actual cropping
+    // Convert percentage to pixel values for spatial cropping
     const pixelCrop = {
       x: Math.round((cropRegion.x / 100) * videoDimensions.width),
       y: Math.round((cropRegion.y / 100) * videoDimensions.height),
       width: Math.round((cropRegion.width / 100) * videoDimensions.width),
       height: Math.round((cropRegion.height / 100) * videoDimensions.height),
     };
-    onConfirm(pixelCrop);
+
+    // Pass both spatial crop and time range
+    onConfirm({
+      ...pixelCrop,
+      startTime: startTime,
+      endTime: endTime,
+    });
   };
 
   return (
@@ -231,8 +344,6 @@ export default function VSVideoCrop(props) {
             display: "block",
           }}
           muted
-          autoPlay
-          loop
           playsInline
         />
         <canvas
@@ -250,6 +361,109 @@ export default function VSVideoCrop(props) {
         />
       </Paper>
 
+      {/* Play/Pause button */}
+      <Stack direction="row" justifyContent="center" sx={{ mt: 1 }}>
+        <IconButton onClick={togglePlayPause} sx={{ color: allianceColor }}>
+          {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+        </IconButton>
+      </Stack>
+
+      {/* Crop Start Time Selection - Two sliders for precise control */}
+      <Box
+        sx={{
+          backgroundColor: "rgba(255,255,255,0.1)",
+          borderRadius: 1,
+          p: 2,
+          mt: 2,
+        }}
+      >
+        <Typography variant="subtitle2" color={allianceColor} sx={{ mb: 1 }}>
+          Crop Start Time - Two sliders for precise control
+        </Typography>
+
+        {/* Whole seconds slider with +/- buttons */}
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <IconButton
+            onClick={() => adjustWholeSeconds(-1)}
+            sx={{ color: "white" }}
+            size="small"
+          >
+            <RemoveIcon />
+          </IconButton>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="caption" color="white" sx={{ ml: 1 }}>
+              Whole seconds: {startTimeWhole}s
+            </Typography>
+            <Slider
+              value={startTimeWhole}
+              onChange={handleStartTimeWholeChange}
+              min={0}
+              max={Math.max(0, Math.floor(videoDuration - 1))}
+              step={1}
+              sx={{ color: allianceColor }}
+            />
+          </Box>
+          <IconButton
+            onClick={() => adjustWholeSeconds(1)}
+            sx={{ color: "white" }}
+            size="small"
+          >
+            <AddIcon />
+          </IconButton>
+        </Stack>
+
+        {/* Hundredths slider with +/- buttons */}
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <IconButton
+            onClick={() => adjustHundredths(-0.01)}
+            sx={{ color: "white" }}
+            size="small"
+          >
+            <RemoveIcon />
+          </IconButton>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="caption" color="white" sx={{ ml: 1 }}>
+              Hundredths: +{startTimeFraction.toFixed(2)}s
+            </Typography>
+            <Slider
+              value={startTimeFraction}
+              onChange={handleStartTimeFractionChange}
+              min={0}
+              max={0.99}
+              step={0.01}
+              sx={{ color: allianceColor }}
+            />
+          </Box>
+          <IconButton
+            onClick={() => adjustHundredths(0.01)}
+            sx={{ color: "white" }}
+            size="small"
+          >
+            <AddIcon />
+          </IconButton>
+        </Stack>
+
+        <Stack direction="row" justifyContent="space-between" sx={{ mt: 1 }}>
+          <Typography variant="body2" color={allianceColor}>
+            Total Start: {formatTimePrecise(startTime)}
+          </Typography>
+          <Typography variant="body2" color={allianceColor}>
+            End: {formatTimePrecise(endTime)} (
+            {formatTimePrecise(endTime - startTime)})
+          </Typography>
+        </Stack>
+
+        {/* Preview button */}
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={jumpToCropStart}
+          sx={{ mt: 1, color: allianceColor, borderColor: allianceColor }}
+        >
+          Preview from crop start
+        </Button>
+      </Box>
+
       {/* Size sliders - width and height */}
       <Box sx={{ mt: 2, px: 1 }}>
         <Typography variant="body2" color="white" gutterBottom>
@@ -263,12 +477,7 @@ export default function VSVideoCrop(props) {
           sx={{ color: allianceColor }}
         />
 
-        <Typography
-          variant="body2"
-          color="white"
-          gutterBottom
-          sx={{ mt: 2 }}
-        >
+        <Typography variant="body2" color="white" gutterBottom sx={{ mt: 2 }}>
           Height: {cropRegion.height.toFixed(0)}%
         </Typography>
         <Slider
@@ -290,10 +499,17 @@ export default function VSVideoCrop(props) {
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          Position: ({cropRegion.x.toFixed(0)}%, {cropRegion.y.toFixed(0)}%)
+          Spatial Position: ({cropRegion.x.toFixed(0)}%,{" "}
+          {cropRegion.y.toFixed(0)}%)
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Size: {cropRegion.width.toFixed(0)}% × {cropRegion.height.toFixed(0)}%
+          Spatial Size: {cropRegion.width.toFixed(0)}% ×{" "}
+          {cropRegion.height.toFixed(0)}%
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Time Range: {formatTimePrecise(startTime)} -{" "}
+          {formatTimePrecise(endTime)} ({formatTimePrecise(endTime - startTime)}
+          )
         </Typography>
       </Box>
 

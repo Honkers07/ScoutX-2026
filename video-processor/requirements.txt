@@ -1,13 +1,15 @@
 # Flask and CORS
-flask>=2.3.0
-flask-cors>=4.0.0
-gunicorn>=21.0.0
+flask>=2.2.0
+flask-cors>=3.0.10
+gunicorn>=20.1.0
 
 # Computer Vision and OCR
-opencv-python>=4.8.0
-easyocr>=1.7.0
+opencv-python>=4.6.0
+easyocr==1.4
+python-bidi==0.4.2
 certifi>=2023.0.0
 
 # Image processing
-numpy>=1.24.0
-Pillow>=10.0.0
+numpy>=1.21.0
+Pillow>=9.0.0
+scipy>=1.7.0
