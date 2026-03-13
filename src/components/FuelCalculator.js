@@ -54,6 +54,12 @@ let SCOREBOARD = {
   RATE: 0.1,
 };
 
+let QUALITY_METRICS = {
+  MIN_SHOOTING_TIME: 2, // threshold below which rely mostly on accuracy
+  REFERENCE_SHOOTING_TIME: 10, // at this time, confidence is fully weighted
+  CONFIDENCE_WEIGHT: 0.5, // max weight for confidence when shooting time is high
+};
+
 // Export function to set constants (for tuning)
 export function setConstants(newConstants) {
   if (newConstants.MATCH_TIMING)
@@ -71,6 +77,8 @@ export function setConstants(newConstants) {
     DATA_FILTERING = { ...DATA_FILTERING, ...newConstants.DATA_FILTERING };
   if (newConstants.SCOREBOARD)
     SCOREBOARD = { ...SCOREBOARD, ...newConstants.SCOREBOARD };
+  if (newConstants.QUALITY_METRICS)
+    QUALITY_METRICS = { ...QUALITY_METRICS, ...newConstants.QUALITY_METRICS };
 }
 
 // Export function to get current constants
@@ -82,6 +90,7 @@ export function getConstants() {
     SCOUTER_DELAY,
     DATA_FILTERING,
     SCOREBOARD,
+    QUALITY_METRICS,
   };
 }
 
@@ -106,6 +115,37 @@ function splitAutoTeleByTime(time, value) {
 
 function roundFuel(x) {
   return Math.round(Number(x ?? 0));
+}
+
+/**
+ * Calculate quality metric for a robot
+ * Combines confidence (per-robot) with accuracy (alliance-wide)
+ * Confidence is weighted by shooting time - more shooting time = more weight on confidence
+ */
+export function calculateQuality(robot, accuracy) {
+  const shootingTime = Number(robot.shootingTime ?? 0);
+  const confidence = Number(robot.confidence ?? 0);
+
+  // If shooting time is below threshold, rely primarily on accuracy
+  if (shootingTime < QUALITY_METRICS.MIN_SHOOTING_TIME) {
+    return accuracy;
+  }
+
+  // Calculate confidence weight based on shooting time
+  // At REFERENCE_SHOOTING_TIME, confidence gets full weight
+  const confidenceWeight = Math.min(
+    shootingTime / QUALITY_METRICS.REFERENCE_SHOOTING_TIME,
+    1.0
+  );
+
+  // When there's lots of shooting time, confidence matters more
+  // When there's little shooting time, accuracy matters more
+  const weightedConfidence =
+    confidence * confidenceWeight * QUALITY_METRICS.CONFIDENCE_WEIGHT;
+  const weightedAccuracy =
+    accuracy * (1 - confidenceWeight * QUALITY_METRICS.CONFIDENCE_WEIGHT);
+
+  return weightedConfidence + weightedAccuracy;
 }
 
 // ----------------------------- Data cleaning / timing -----------------------------
@@ -969,10 +1009,12 @@ export async function calculateFuelScored(matchNumber) {
         ...adjustedRedRes.map((r) => ({
           ...r,
           accuracy: redAccuracy,
+          quality: calculateQuality(r, redAccuracy),
         })),
         ...adjustedBlueRes.map((r) => ({
           ...r,
           accuracy: blueAccuracy,
+          quality: calculateQuality(r, blueAccuracy),
         })),
       ];
     }
@@ -1101,8 +1143,16 @@ export async function calculateFuelScored(matchNumber) {
   );
 
   return [
-    ...adjustedRedResults.map((r) => ({ ...r, accuracy: redAccuracy })),
-    ...adjustedBlueResults.map((r) => ({ ...r, accuracy: blueAccuracy })),
+    ...adjustedRedResults.map((r) => ({
+      ...r,
+      accuracy: redAccuracy,
+      quality: calculateQuality(r, redAccuracy),
+    })),
+    ...adjustedBlueResults.map((r) => ({
+      ...r,
+      accuracy: blueAccuracy,
+      quality: calculateQuality(r, blueAccuracy),
+    })),
   ];
 }
 
