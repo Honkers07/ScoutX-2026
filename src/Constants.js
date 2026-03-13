@@ -8,6 +8,7 @@ import FuelScout from "./components/pages/FuelScout";
 import MatchAssignments from "./components/pages/MatchAssignments";
 import ScouterAssignments from "./components/pages/ScouterAssignments";
 import Assignments from "./components/pages/Assignments";
+import FlappyBird3D from "./components/pages/FlappyBird";
 
 
 export const Constants = {
@@ -59,6 +60,11 @@ export const Constants = {
             path: "/assignments",
             component: Assignments,
         },
+        {
+            title: "FLAPPY BIRD",
+            path: "/flappybird",
+            component: FlappyBird3D,
+        }
     ],
 
 
@@ -84,17 +90,17 @@ export const Constants = {
 
    developers: [
        {
-           name: "Eric Jacobson",
-           year: "Scouting App Lead - 2nd Year",
-           icon: require("./assets/field.png"),
+           name: "Jacob Ericson",
+           year: "Scouting App Lead - 1st Year",
+           icon: require("./assets/jacob.jpeg"),
        },
        {
            name: "Maxwell Tan",
-           year: "Developer - 1st Year",
+           year: "Developer - 4th Year",
            icon: require("./assets/field.png"),
        },
        {
-           name: "William Han",
+           name: "Willy Han",
            year: "Developer - 2nd Year",
            icon: require("./assets/field.png"),
        },
@@ -149,6 +155,14 @@ export const Constants = {
                "Ashir Rao",
                "Tyrus Chung"
            ]
+       },
+       {
+            year: "2025",
+            developers: [
+                "Maxwell Tan",
+                "Jacob Ericson",
+                "Big Willy"
+            ]
        }
    ],
 }

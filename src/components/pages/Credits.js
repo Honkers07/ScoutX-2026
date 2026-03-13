@@ -29,7 +29,7 @@ const Credits = () => {
                 <Grid2 xs={12} sm={6}>
                     <Stack direction={"column"} spacing={0.5}>
                         <Typography variant={"h5"}>
-                            2025 Development Team
+                            2026 Development Team
                         </Typography>
                         <List dense>
                             {Constants.developers.map((developer) => {
