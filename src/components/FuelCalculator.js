@@ -37,7 +37,7 @@ let HISTORICAL_AVERAGING = {
 };
 
 let SCOUTER_DELAY = {
-  START: .5,
+  START: 0.5,
   END: 0,
 };
 
@@ -765,6 +765,22 @@ function sumAutoTeleTimeFromAdjustedTimes(adjustedTimes) {
   return { autoTime, teleTime };
 }
 
+// ----------------------------- Helper to get actual fuel from score timeline -----------------------------
+
+function getActualFuelFromTimeline(scoreTimeline) {
+  const incs = filterFuelIncrements(scoreTimeline);
+  let autoFuel = 0;
+  let teleFuel = 0;
+  for (const i of incs) {
+    if (i.time <= MATCH_TIMING.TRANSITION_SHIFT_END) {
+      autoFuel += i.increment;
+    } else {
+      teleFuel += i.increment;
+    }
+  }
+  return { autoFuel, teleFuel, totalFuel: autoFuel + teleFuel };
+}
+
 // ----------------------------- Main function -----------------------------
 
 export async function calculateFuelScored(matchNumber) {
@@ -805,6 +821,19 @@ export async function calculateFuelScored(matchNumber) {
     !!videoScore &&
     distinctTeams.size === 6 &&
     determineAutoWinner(videoScore) !== "tie";
+
+  // Get actual fuel from scoreboard for accuracy calculation
+  let actualRedFuel = { autoFuel: 0, teleFuel: 0, totalFuel: 0 };
+  let actualBlueFuel = { autoFuel: 0, teleFuel: 0, totalFuel: 0 };
+
+  if (videoScore) {
+    actualRedFuel = getActualFuelFromTimeline(
+      videoScore.redScoreTimeline || []
+    );
+    actualBlueFuel = getActualFuelFromTimeline(
+      videoScore.blueScoreTimeline || []
+    );
+  }
 
   if (canVideo) {
     // Video Method
@@ -860,16 +889,92 @@ export async function calculateFuelScored(matchNumber) {
         }),
       ]);
 
-      return [...redRes, ...blueRes].map((r) => {
-        const autoFuel = roundFuel(r.autoFuel);
-        const teleFuel = roundFuel(r.teleFuel);
-        return {
+      // Calculate accuracy metrics
+      const calculatedRedAutoFuel = redRes.reduce(
+        (sum, r) => sum + r.autoFuel,
+        0
+      );
+      const calculatedRedTeleFuel = redRes.reduce(
+        (sum, r) => sum + r.teleFuel,
+        0
+      );
+      const calculatedBlueAutoFuel = blueRes.reduce(
+        (sum, r) => sum + r.autoFuel,
+        0
+      );
+      const calculatedBlueTeleFuel = blueRes.reduce(
+        (sum, r) => sum + r.teleFuel,
+        0
+      );
+
+      const calculatedRedFuel = calculatedRedAutoFuel + calculatedRedTeleFuel;
+      const calculatedBlueFuel =
+        calculatedBlueAutoFuel + calculatedBlueTeleFuel;
+
+      const redAccuracy =
+        actualRedFuel.totalFuel > 0
+          ? calculatedRedFuel / actualRedFuel.totalFuel
+          : 0;
+      const blueAccuracy =
+        actualBlueFuel.totalFuel > 0
+          ? calculatedBlueFuel / actualBlueFuel.totalFuel
+          : 0;
+
+      // Apply percentage-based adjustment to each robot
+      // Each robot's autoFuel should sum to actual auto fuel, same for tele
+      const adjustByPercentages = (
+        results,
+        actualFuel,
+        calculatedAuto,
+        calculatedTele
+      ) => {
+        return results.map((r) => {
+          // Calculate percentages based on alliance totals
+          const autoPercentage =
+            calculatedAuto > 0 ? r.autoFuel / calculatedAuto : 0;
+          const telePercentage =
+            calculatedTele > 0 ? r.teleFuel / calculatedTele : 0;
+
+          // Apply percentages to actual alliance fuel
+          const adjustedAutoFuel = roundFuel(
+            autoPercentage * actualFuel.autoFuel
+          );
+          const adjustedTeleFuel = roundFuel(
+            telePercentage * actualFuel.teleFuel
+          );
+
+          return {
+            ...r,
+            autoFuel: adjustedAutoFuel,
+            teleFuel: adjustedTeleFuel,
+            totalFuel: adjustedAutoFuel + adjustedTeleFuel,
+          };
+        });
+      };
+
+      const adjustedRedRes = adjustByPercentages(
+        redRes,
+        actualRedFuel,
+        calculatedRedAutoFuel,
+        calculatedRedTeleFuel
+      );
+      const adjustedBlueRes = adjustByPercentages(
+        blueRes,
+        actualBlueFuel,
+        calculatedBlueAutoFuel,
+        calculatedBlueTeleFuel
+      );
+
+      return [
+        ...adjustedRedRes.map((r) => ({
           ...r,
-          autoFuel,
-          teleFuel,
-          totalFuel: autoFuel + teleFuel,
-        };
-      });
+          accuracy: redAccuracy,
+        })),
+        ...adjustedBlueRes.map((r) => ({
+          ...r,
+          accuracy: blueAccuracy,
+        })),
+      ];
     }
   }
 
@@ -921,7 +1026,84 @@ export async function calculateFuelScored(matchNumber) {
     });
   }
 
-  return results;
+  // Calculate accuracy for basic method
+  const redResults = results.filter((r) => r.alliance === "red");
+  const blueResults = results.filter((r) => r.alliance === "blue");
+
+  const calculatedRedAutoFuel = redResults.reduce(
+    (sum, r) => sum + r.autoFuel,
+    0
+  );
+  const calculatedRedTeleFuel = redResults.reduce(
+    (sum, r) => sum + r.teleFuel,
+    0
+  );
+  const calculatedBlueAutoFuel = blueResults.reduce(
+    (sum, r) => sum + r.autoFuel,
+    0
+  );
+  const calculatedBlueTeleFuel = blueResults.reduce(
+    (sum, r) => sum + r.teleFuel,
+    0
+  );
+
+  const calculatedRedFuel = calculatedRedAutoFuel + calculatedRedTeleFuel;
+  const calculatedBlueFuel = calculatedBlueAutoFuel + calculatedBlueTeleFuel;
+
+  const redAccuracy =
+    actualRedFuel.totalFuel > 0
+      ? calculatedRedFuel / actualRedFuel.totalFuel
+      : 0;
+  const blueAccuracy =
+    actualBlueFuel.totalFuel > 0
+      ? calculatedBlueFuel / actualBlueFuel.totalFuel
+      : 0;
+
+  // Apply percentage-based adjustment for basic method
+  // Each robot's autoFuel should sum to actual auto fuel, same for tele
+  const adjustBasicByPercentages = (
+    results,
+    actualFuel,
+    calculatedAuto,
+    calculatedTele
+  ) => {
+    return results.map((r) => {
+      // Calculate percentages based on alliance totals
+      const autoPercentage =
+        calculatedAuto > 0 ? r.autoFuel / calculatedAuto : 0;
+      const telePercentage =
+        calculatedTele > 0 ? r.teleFuel / calculatedTele : 0;
+
+      // Apply percentages to actual alliance fuel
+      const adjustedAutoFuel = roundFuel(autoPercentage * actualFuel.autoFuel);
+      const adjustedTeleFuel = roundFuel(telePercentage * actualFuel.teleFuel);
+
+      return {
+        ...r,
+        autoFuel: adjustedAutoFuel,
+        teleFuel: adjustedTeleFuel,
+        totalFuel: adjustedAutoFuel + adjustedTeleFuel,
+      };
+    });
+  };
+
+  const adjustedRedResults = adjustBasicByPercentages(
+    redResults,
+    actualRedFuel,
+    calculatedRedAutoFuel,
+    calculatedRedTeleFuel
+  );
+  const adjustedBlueResults = adjustBasicByPercentages(
+    blueResults,
+    actualBlueFuel,
+    calculatedBlueAutoFuel,
+    calculatedBlueTeleFuel
+  );
+
+  return [
+    ...adjustedRedResults.map((r) => ({ ...r, accuracy: redAccuracy })),
+    ...adjustedBlueResults.map((r) => ({ ...r, accuracy: blueAccuracy })),
+  ];
 }
 
 // Default export
