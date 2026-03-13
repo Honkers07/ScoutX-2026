@@ -102,7 +102,8 @@ export default function Home() {
                {renderScoutButton('/timer', "Shoot Times Scout", isSmallScreen)}
                {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
                {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
-               {renderScoutButton('/credits', "Credits", isSmallScreen)}
+               {renderScoutButton('/assignments', "Assignments", isSmallScreen)}
+                {renderScoutButton('/credits', "Credits", isSmallScreen)}
             </Stack>
             <Stack direction="row" spacing={2} sx={{ position: "absolute",
                     top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
@@ -123,7 +124,7 @@ export default function Home() {
                    }}
                    onClick={async () => {
                        try {
-                           const matchNumber = 1;
+                           const matchNumber = 3;
                            const results = await calculateFuelScored(matchNumber);
                            console.log("Fuel Scored Results:", results);
                        } catch (error) {

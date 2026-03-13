@@ -1,7 +1,44 @@
-import {MatchStage, StartPosition, IntakeElement, IntakeLocations} from "./MatchConstants";
+import {MatchStage, StartPosition, IntakeElement, IntakeLocations, ElementPointsAuto, ElementPointsTele, CageLocation} from "./MatchConstants";
 import {Scouters} from "./Scouters";
 import {doc, getFirestore, setDoc} from "firebase/firestore";
 import { Constants } from "../Constants";
+
+// Import functions from AssignmentHelpers
+import { getAssignmentForScouter, getNextAssignment, markAssignmentComplete } from "./pages/AssignmentHelpers";
+
+// Default scouter pool
+const DEFAULT_SCOUTERS = [
+    "Sophia",
+  "Catie",
+  "Aiden Y",
+  "Aarav",
+  "Eileen",
+  "Ethan H",
+  "Adrian",
+  "Andrew",
+  "Nova",
+  "Ammar",
+  "David",
+  "Brian",
+  "Anthony",
+  "Ty",
+  "Cyrus",
+  "Nolan",
+  "Dylan",
+  "Aditya",
+  "Alexander",
+  "Ethan M",
+  "Logan M",
+  "Timofei",
+  "Saara",
+  "Shaurya",
+  "Elana",
+  "Charlie",
+  "Avyank",
+  "Wesley",
+  "Dylan X",
+  "Eric Y",
+];
 
 const climb = [
     "No Climb",
@@ -76,6 +113,131 @@ export default class MatchScoutData {
             message: "",
             severity: "success",
         };
+    }
+
+    // Check if a name is in the scouter pool
+    isValidScouter(name) {
+        const savedScouters = localStorage.getItem("scouterPool");
+        const scouterPool = savedScouters ? JSON.parse(savedScouters) : DEFAULT_SCOUTERS;
+        return scouterPool.some(s => s.toLowerCase() === name.toLowerCase());
+    }
+
+    // Get assignment for a scouter by name and match number
+    getAssignmentForScouter(name, matchNumber) {
+        const savedAssignments = localStorage.getItem("matchAssignments");
+        if (!savedAssignments) return null;
+
+        const assignments = JSON.parse(savedAssignments);
+        const key = `match${matchNumber}`;
+        const matchAssignments = assignments[key];
+
+        if (!matchAssignments) return null;
+
+        // Find which slot this scouter is assigned to
+        for (const [slot, scouterName] of Object.entries(matchAssignments)) {
+            if (scouterName && scouterName.toLowerCase() === name.toLowerCase()) {
+                // Determine alliance and position
+                const isRed = slot.startsWith("red");
+                const position = isRed 
+                    ? parseInt(slot.replace("red", "")) 
+                    : parseInt(slot.replace("blue", ""));
+
+                // Get team number for this slot
+                const eventCode = localStorage.getItem("eventCode");
+                let teamNumber = "";
+
+                if (eventCode) {
+                    // Try to get team number from saved matches
+                    const savedMatches = localStorage.getItem("eventMatches");
+                    if (savedMatches) {
+                        const matches = JSON.parse(savedMatches);
+                        const match = matches.find(m => m.matchNumber === matchNumber);
+                        if (match) {
+                            teamNumber = isRed ? match.red[position - 1] : match.blue[position - 1];
+                        }
+                    }
+                }
+
+                return {
+                    matchNumber,
+                    alliance: isRed ? "Red" : "Blue",
+                    position: position,
+                    slot: slot,
+                    team: teamNumber
+                };
+            }
+        }
+
+        return null;
+    }
+
+    // Auto-fill fields based on scouter assignment
+    // Returns the assignment info if found, null otherwise
+    autoFillFromAssignment(name, matchNumber) {
+        const assignment = this.getAssignmentForScouter(name, matchNumber);
+        
+        if (assignment) {
+            // Auto-fill the prematch data
+            this.data[MatchStage.PRE_MATCH]["match"] = assignment.matchNumber.toString();
+            this.data[MatchStage.PRE_MATCH]["alliance"] = assignment.alliance;
+            this.data[MatchStage.PRE_MATCH]["start_position"] = assignment.position.toString();
+            this.data[MatchStage.PRE_MATCH]["verificationCode"] = assignment.verificationCode || "";
+            
+            if (assignment.team) {
+                this.data[MatchStage.PRE_MATCH]["team"] = assignment.team.toString();
+            }
+            
+            return assignment;
+        }
+        
+        return null;
+    }
+
+    // Get all assignments for display
+    getAllAssignments() {
+        const savedAssignments = localStorage.getItem("matchAssignments");
+        return savedAssignments ? JSON.parse(savedAssignments) : {};
+    }
+
+    // Get current match number from saved state
+    getCurrentMatchNumber() {
+        return this.data[MatchStage.PRE_MATCH]["match"];
+    }
+
+    // Set match number and auto-fill from assignment
+    setMatchNumberAndAutoFill(name, matchNumber) {
+        this.data[MatchStage.PRE_MATCH]["match"] = matchNumber.toString();
+        return this.autoFillFromAssignment(name, matchNumber);
+    }
+
+    // Get the next incomplete assignment for a scouter
+    getNextAssignment(name) {
+        return getNextAssignment(name);
+    }
+
+    // Auto-fill from next assignment after submission
+    autoFillFromNextAssignment(name) {
+        const nextAssignment = getNextAssignment(name);
+        
+        if (nextAssignment) {
+            this.data[MatchStage.PRE_MATCH]["match"] = nextAssignment.match.toString();
+            this.data[MatchStage.PRE_MATCH]["alliance"] = nextAssignment.alliance;
+            this.data[MatchStage.PRE_MATCH]["start_position"] = nextAssignment.position.toString();
+            this.data[MatchStage.PRE_MATCH]["verificationCode"] = nextAssignment.verificationCode || "";
+            
+            if (nextAssignment.team) {
+                this.data[MatchStage.PRE_MATCH]["team"] = nextAssignment.team.toString();
+            }
+            
+            return nextAssignment;
+        }
+        
+        return null;
+    }
+
+    // Mark current assignment as completed
+    async markCurrentAssignmentCompleted(name, matchNumber) {
+        await markAssignmentComplete(name, matchNumber);
     }
 
     get(stage, path) {
@@ -251,7 +413,7 @@ export default class MatchScoutData {
                 metrics.AutoAlgaeScored++;
                 if (outtakeLocation === "PROCESSOR") metrics.AutoAlgaeProcessor++;
                 if (outtakeLocation === "NET") metrics.AutoAlgaeNet++;
-                if (intakeLocation == "GROUND") metrics.AutoAlgaeIntakeGround++;
+                if (intakeLocation === "GROUND") metrics.AutoAlgaeIntakeGround++;
                 if (intakeLocation === "REEF") metrics.AutoAlgaeIntakeReef++; 
                 totalAlgaeCycleTime += cycleTime;
                 algaeCount++;
@@ -341,7 +503,7 @@ export default class MatchScoutData {
                 metrics.TeleAlgaeScored++;
                 if (outtakeLocation === "PROCESSOR") metrics.TeleAlgaeProcessor++;
                 if (outtakeLocation === "NET") metrics.TeleAlgaeNet++;
-                if (intakeLocation == "GROUND") metrics.TeleAlgaeIntakeGround++;
+                if (intakeLocation === "GROUND") metrics.TeleAlgaeIntakeGround++;
                 if (intakeLocation === "REEF") metrics.TeleAlgaeIntakeReef++; 
                 totalAlgaeCycleTime += cycleTime;
                 algaeCount++;
@@ -355,7 +517,90 @@ export default class MatchScoutData {
         return metrics;
     }
     
-
+    // Calculate derived summary metrics for analytics
+    deriveSummaryMetrics() {
+        const autoOuttakeCounts = this.data[MatchStage.AUTO]["outtakeCounts"];
+        const teleOuttakeCounts = this.data[MatchStage.TELEOP]["outtakeCounts"];
+        const climbPosition = this.data[MatchStage.TELEOP]["climb"];
+        const leave = this.data[MatchStage.AUTO]["leave"];
+        
+        // Calculate Auto Points
+        let autoCoralPoints = 0;
+        let autoAlgaePoints = 0;
+        let autoLeavePoints = leave ? ElementPointsAuto.LEAVE : 0;
+        
+        autoOuttakeCounts.forEach(entry => {
+            const { element, outtakeLocation } = entry;
+            const isMissed = outtakeLocation.includes("MISSED");
+            if (isMissed) return;
+            
+            if (element === "CORAL") {
+                if (outtakeLocation === "L1") autoCoralPoints += ElementPointsAuto.CORALL1;
+                else if (outtakeLocation === "L2") autoCoralPoints += ElementPointsAuto.CORALL2;
+                else if (outtakeLocation === "L3") autoCoralPoints += ElementPointsAuto.CORALL3;
+                else if (outtakeLocation === "L4") autoCoralPoints += ElementPointsAuto.CORALL4;
+            } else if (element === "ALGAE") {
+                if (outtakeLocation === "NET") autoAlgaePoints += ElementPointsAuto.ALGAENET;
+                else if (outtakeLocation === "PROCESSOR") autoAlgaePoints += ElementPointsAuto.ALGAEPROCESSOR;
+            }
+        });
+        
+        // Calculate Teleop Points
+        let teleCoralPoints = 0;
+        let teleAlgaePoints = 0;
+        let climbPoints = 0;
+        
+        teleOuttakeCounts.forEach(entry => {
+            const { element, outtakeLocation } = entry;
+            const isMissed = outtakeLocation.includes("MISSED");
+            if (isMissed) return;
+            
+            if (element === "CORAL") {
+                if (outtakeLocation === "L1") teleCoralPoints += ElementPointsTele.CORALL1;
+                else if (outtakeLocation === "L2") teleCoralPoints += ElementPointsTele.CORALL2;
+                else if (outtakeLocation === "L3") teleCoralPoints += ElementPointsTele.CORALL3;
+                else if (outtakeLocation === "L4") teleCoralPoints += ElementPointsTele.CORALL4;
+            } else if (element === "ALGAE") {
+                if (outtakeLocation === "NET") teleAlgaePoints += ElementPointsTele.ALGAENET;
+                else if (outtakeLocation === "PROCESSOR") teleAlgaePoints += ElementPointsTele.ALGAEPROCESSOR;
+            }
+        });
+        
+        // Calculate Climb Points
+        if (climbPosition === "L1") climbPoints = ElementPointsTele.PARK;
+        else if (climbPosition === "L2") climbPoints = ElementPointsTele.SHALLOW;
+        else if (climbPosition === "L3") climbPoints = ElementPointsTele.DEEP;
+        
+        const autoPoints = autoLeavePoints + autoCoralPoints + autoAlgaePoints;
+        const telePoints = teleCoralPoints + teleAlgaePoints + climbPoints;
+        const totalPoints = autoPoints + telePoints;
+        
+        // Calculate scoring rate (elements per second)
+        const totalAutoElements = autoOuttakeCounts.filter(e => !e.outtakeLocation.includes("MISSED")).length;
+        const totalTeleElements = teleOuttakeCounts.filter(e => !e.outtakeLocation.includes("MISSED")).length;
+        const autoTime = 15; // Auto period is 15 seconds
+        const teleTime = 135; // Teleop period is 135 seconds
+        
+        const coralPoints = autoCoralPoints + teleCoralPoints;
+        const algaePoints = autoAlgaePoints + teleAlgaePoints;
+        
+        return {
+            autoPoints: autoPoints,
+            telePoints: telePoints,
+            totalPoints: totalPoints,
+            autoCoralPoints: autoCoralPoints,
+            teleCoralPoints: teleCoralPoints,
+            totalCoralPoints: coralPoints,
+            autoAlgaePoints: autoAlgaePoints,
+            teleAlgaePoints: teleAlgaePoints,
+            totalAlgaePoints: algaePoints,
+            climbPoints: climbPoints,
+            autoLeavePoints: autoLeavePoints,
+            autoElementsPerSecond: autoTime > 0 ? (totalAutoElements / autoTime).toFixed(3) : 0,
+            teleElementsPerSecond: teleTime > 0 ? (totalTeleElements / teleTime).toFixed(3) : 0,
+        };
+    }
+    
     async submit() {
         const isIncomplete = this.data[0]['team'] === '' || 
                             this.data[0]['match'] === '' || 
@@ -388,6 +633,7 @@ export default class MatchScoutData {
     
             const autoMetrics = this.deriveAutoOuttakeMetrics();
             const teleMetrics = this.deriveTeleOuttakeMetrics();
+            const summaryMetrics = this.deriveSummaryMetrics();
     
             let firebaseData = {
                 autoioCount: autoioCount,
@@ -397,7 +643,7 @@ export default class MatchScoutData {
                 ClimbPosition: teleClimbPosition,
             };
     
-            firebaseData = { ...firebaseData, ...autoMetrics, ...teleMetrics };
+            firebaseData = { ...firebaseData, ...autoMetrics, ...teleMetrics, ...summaryMetrics };
     
             for (const key in defaultData) {
                 for (const inner in defaultData[key]) {

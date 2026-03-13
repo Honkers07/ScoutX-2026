@@ -81,6 +81,7 @@ The project uses Firebase with the following services:
 - `teams`: Team data
 - `pitData`: Pit scouting data
 - `videoScoutData`: Video scouting submissions
+- `assignments`: Match assignments
 
 ## Common Development Tasks
 
@@ -145,8 +146,85 @@ The assignment generator exposes endpoints (typically on port 8080):
 | [`src/components/MatchScoutData.js`](src/components/MatchScoutData.js:1) | Data class for match scouting with Firestore submit |
 | [`src/components/pages/FuelScout.js`](src/components/pages/FuelScout.js:1) | Fuel scouting page |
 | [`src/components/pages/MatchScout.js`](src/components/pages/MatchScout.js:1) | Match scouting page |
+| [`src/components/pages/MatchAssignments.js`](src/components/pages/MatchAssignments.js:1) | Admin match assignments page |
+| [`src/components/pages/AssignmentConstants.js`](src/components/pages/AssignmentConstants.js:1) | Assignment constants (scouter pool, colors, verification codes) |
+| [`src/components/pages/AssignmentHelpers.js`](src/components/pages/AssignmentHelpers.js:1) | Assignment utility functions |
+| [`src/components/pages/AssignmentModals.js`](src/components/pages/AssignmentModals.js:1) | Reusable modal components |
+| [`src/components/pages/Assignments.js`](src/components/pages/Assignments.js:1) | My Assignments page (scouter view) |
+| [`src/components/pages/ScouterAssignments.js`](src/components/pages/ScouterAssignments.js:1) | Scouter assignments management |
 | [`functions/index.js`](functions/index.js:1) | Cloud functions |
 | [`assignment/generator/src/main/kotlin/me/tyrus/generator/Main.kt`](assignment/generator/src/main/kotlin/me/tyrus/generator/Main.kt:1) | Assignment generator entry |
+
+## Default Scouter Pool
+
+The application uses the following default scouter names:
+- Sophia, Catie, Aiden Y, Aarav, Eileen, Ethan H, Adrian, Andrew, Nova, Ammar
+- David, Brian, Anthony, Ty, Cyrus, Nolan, Dylan, Aditya, Alexander, Ethan M
+- Logan M, Timofei, Saara, Shaurya, Elana, Charlie, Avyank, Wesley, Dylan X, Eric Y
+
+## Autofill + Verification + Assignment Completion System
+
+### Assignment Data Model
+
+Assignments are stored in Firestore with the following structure:
+
+```
+assignments/{scouterName}
+```
+
+Each document contains an array of assignment objects:
+
+```javascript
+{
+  scouterName: "Alex",
+  matchNumber: 12,
+  teamNumber: 254,
+  alliance: "Red",
+  position: 1,
+  verificationCode: "AX12R",
+  completed: false
+}
+```
+
+### Verification Code Generation
+
+Verification codes are generated using:
+
+```javascript
+verificationCode = generateVerificationCode(scouterName, matchNumber, alliance)
+// Output format: [initials][match suffix][alliance char]
+// Example: Alex + Match 12 + Red → AX12R
+```
+
+### Prematch Autofill Flow
+
+1. Scouter enters their name in the MatchScout prematch page
+2. System queries assignments for that scouter
+3. If assignments exist, fields are autofilled:
+   - Match Number
+   - Team Number
+   - Alliance
+   - Position
+   - Verification Code
+4. "Load Next" button loads the next pending assignment
+
+### Assignment Completion Flow
+
+1. Scouter submits match data
+2. System marks the assignment as completed in:
+   - localStorage (matchAssignments)
+   - Firestore (assignments collection)
+3. Assignments page updates in real-time
+4. Next assignment can be loaded for the scouter
+
+### Key Functions
+
+| Function | Purpose |
+|----------|--------|
+| `getAssignmentForScouter(name, match)` | Get specific assignment |
+| `getNextAssignment(name)` | Get next pending assignment |
+| `markAssignmentComplete(name, match)` | Mark assignment as done |
+| `generateVerificationCode(name, match, alliance)` | Generate verification code |
 
 ## Constraints
 
@@ -155,6 +233,30 @@ The assignment generator exposes endpoints (typically on port 8080):
 3. **No sensitive data in commits** - Use `.env` for API keys and secrets
 4. **Follow FRC game rules** - Understand the current year's game mechanics
 5. **Mobile-first design** - Scouting often happens on mobile devices
+
+## Shift Management Features
+
+### Generating Shifts
+
+1. Import matches from The Blue Alliance
+2. Click "Auto Generate (Shift-Based)"
+3. System creates multiple shifts based on scouter pool size
+
+### Editing Shift Groups
+
+When shifts are generated, a new "Shift Groups" panel appears:
+
+1. Each shift shows the match range (e.g., "Shift 1 (Matches 1-15)")
+2. Each position has a dropdown to select a scouter
+3. Changes automatically update all matches in that shift
+4. Click "Save Changes" to persist
+
+### How It Works
+
+- **Multiple shifts**: 30 scouters = 5 shifts of 6 each
+- **Match distribution**: 75 matches / 5 shifts = 15 matches per shift
+- **Automatic updates**: Editing a shift immediately updates all its match assignments
+- **No placeholders**: Only uses actual scouters from the scouter pool
 
 ## Data Submission Pattern
 

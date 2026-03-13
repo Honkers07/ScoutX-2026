@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Unstable_Grid2 as Grid2, TextField, Switch, FormControlLabel, Slider, Paper } from "@mui/material";
+import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Unstable_Grid2 as Grid2, TextField, Switch, FormControlLabel, Slider, Paper, ToggleButton, ToggleButtonGroup } from "@mui/material";
 import { MatchStage } from "../MatchConstants";
 import MatchScoutData from "../MatchScoutData";
 import CloseIcon from "@mui/icons-material/Close";
@@ -59,7 +59,10 @@ function TimerPrematch({ data }) {
                     variant="outlined"
                     value={data.get(MatchStage.PRE_MATCH, "name")}
                     onChange={(e) => { 
-                        data.set(MatchStage.PRE_MATCH, "name", e.target.value);
+                        const name = e.target.value;
+                        data.set(MatchStage.PRE_MATCH, "name", name);
+                        // Auto-fill from next assignment when name changes
+                        data.autoFillFromNextAssignment(name);
                         update();
                     }}
                     fullWidth
@@ -116,6 +119,30 @@ function TimerPrematch({ data }) {
     );
 }
 
+// Helper function to detect mobile device
+const isMobile = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Helper function to get supported MIME type for MediaRecorder
+const getSupportedMimeType = () => {
+    const mimeTypes = [
+        'audio/mp4',
+        'audio/m4a',
+        'audio/aac',
+        'audio/webm'
+    ];
+    
+    for (const mimeType of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+            console.log('Using MIME type:', mimeType);
+            return mimeType;
+        }
+    }
+    
+    return 'audio/webm'; // Fallback
+};
+
 // Custom Postmatch component for Timer Page
 function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropEnd: initialCropEnd, setCropEnd, amplitudeData, audioBlob, detectedBuzzerTime, actualMatchDuration }) {
     const [counter, setCounter] = useState(0);
@@ -125,8 +152,18 @@ function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropE
     const [cropStart, setCropStartLocal] = useState(initialCropStart);
     const [cropEnd, setCropEndLocal] = useState(initialCropEnd);
     const audioRef = useRef(null);
+    const audioUrlRef = useRef(null);
     const playbackIntervalRef = useRef(null);
     const update = () => setCounter(counter + 1);
+
+    // Clean up audio URL on unmount
+    useEffect(() => {
+        return () => {
+            if (audioUrlRef.current) {
+                URL.revokeObjectURL(audioUrlRef.current);
+            }
+        };
+    }, []);
 
     // Sync local state with props when they change
     useEffect(() => {
@@ -160,49 +197,112 @@ function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropE
         return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     };
 
-    // Handle audio playback with position tracking
-    const togglePlayback = () => {
-        // Ensure we have a fresh audio blob
-        if (audioBlob && (!audioRef.current || audioRef.current.src === '')) {
-            audioRef.current = new Audio(URL.createObjectURL(audioBlob));
-            audioRef.current.onended = () => {
+    // Handle audio playback with position tracking - mobile compatible with playsinline
+    const togglePlayback = async () => {
+        try {
+            // Debug: log audio blob info
+            console.log('Audio blob:', audioBlob);
+            console.log('Audio blob type:', audioBlob?.type);
+            console.log('Audio blob size:', audioBlob?.size);
+            
+            // Clean up old audio URL
+            if (audioUrlRef.current) {
+                URL.revokeObjectURL(audioUrlRef.current);
+            }
+            
+            // Create audio URL
+            audioUrlRef.current = URL.createObjectURL(audioBlob);
+            console.log('Audio URL created:', audioUrlRef.current);
+            
+            // Get or create audio element
+            let audioEl = audioRef.current;
+            
+            // If no element or different URL, create new one
+            if (!audioEl || audioEl.src !== audioUrlRef.current) {
+                // Create hidden audio element with playsinline for iOS
+                if (!audioEl) {
+                    audioEl = document.createElement('audio');
+                    audioEl.setAttribute('playsinline', 'true');
+                    audioEl.setAttribute('webkit-playsinline', 'true');
+                    audioRef.current = audioEl;
+                }
+                audioEl.src = audioUrlRef.current;
+            }
+            
+            // Set up event handlers
+            audioEl.onloadedmetadata = () => {
+                console.log('Metadata loaded, duration:', audioEl.duration);
+            };
+            
+            audioEl.onerror = (e) => {
+                console.error('Audio error:', e);
+                console.error('Error code:', audioEl?.error?.code);
+                console.error('Error message:', audioEl?.error?.message);
+            };
+            
+            audioEl.onended = () => {
                 setIsPlaying(false);
                 setPlaybackPosition(cropStart);
                 if (playbackIntervalRef.current) {
                     clearInterval(playbackIntervalRef.current);
                 }
             };
-        }
-        
-        if (audioRef.current) {
+            
+            // Wait for canplay event
+            await new Promise((resolve) => {
+                const onCanPlay = () => {
+                    console.log('Can play event fired');
+                    audioEl.removeEventListener('canplay', onCanPlay);
+                    resolve();
+                };
+                audioEl.addEventListener('canplay', onCanPlay);
+                // Fallback timeout
+                setTimeout(resolve, 2000);
+            });
+            
             if (isPlaying) {
-                audioRef.current.pause();
+                audioEl.pause();
                 setIsPlaying(false);
                 if (playbackIntervalRef.current) {
                     clearInterval(playbackIntervalRef.current);
                 }
-            } else {
-                // Start from crop start time
-                audioRef.current.currentTime = cropStart;
-                audioRef.current.play();
-                setIsPlaying(true);
-                
-                // Update playback position
-                playbackIntervalRef.current = setInterval(() => {
-                    if (audioRef.current) {
-                        const currentTime = audioRef.current.currentTime;
-                        setPlaybackPosition(currentTime);
-                        
-                        // Stop at crop end time (start + 163 seconds)
-                        if (currentTime >= cropStart + FRC_MATCH_DURATION) {
-                            audioRef.current.pause();
-                            setIsPlaying(false);
-                            setPlaybackPosition(cropStart);
-                            clearInterval(playbackIntervalRef.current);
-                        }
-                    }
-                }, 50);
+                return;
             }
+            
+            // Start playback
+            audioEl.currentTime = cropStart;
+            
+            try {
+                await audioEl.play();
+                setIsPlaying(true);
+                console.log('Playback started');
+            } catch (playError) {
+                console.error('Play error:', playError);
+                // Try playing without setting currentTime first
+                audioEl.currentTime = 0;
+                await audioEl.play();
+                setIsPlaying(true);
+            }
+            
+            // Update playback position
+            playbackIntervalRef.current = setInterval(() => {
+                if (audioEl) {
+                    const currentTime = audioEl.currentTime;
+                    setPlaybackPosition(currentTime);
+                    
+                    // Stop at crop end time
+                    if (currentTime >= cropStart + FRC_MATCH_DURATION) {
+                        audioEl.pause();
+                        setIsPlaying(false);
+                        setPlaybackPosition(cropStart);
+                        clearInterval(playbackIntervalRef.current);
+                    }
+                }
+            }, 100);
+            
+        } catch (error) {
+            console.error('Audio playback failed:', error);
+            setIsPlaying(false);
         }
     };
 
@@ -357,9 +457,16 @@ function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropE
                                     {isPlaying ? 'Stop' : 'Play Audio'}
                                 </Button>
                                 {audioBlob && (
-                                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                                        {isPlaying ? `Playing: ${formatTime(playbackPosition)}` : 'Click to listen to audio and identify the buzzer'}
-                                    </Typography>
+                                    <Box>
+                                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                                            {isPlaying 
+                                                ? `Playing: ${formatTime(playbackPosition)}` 
+                                                : 'Click to listen to audio and identify the buzzer'}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block' }}>
+                                            Format: {audioBlob?.type || 'unknown'} | Size: {audioBlob ? (audioBlob.size / 1024).toFixed(1) + ' KB' : 'N/A'}
+                                        </Typography>
+                                    </Box>
                                 )}
                             </Box>
                             
@@ -424,6 +531,7 @@ function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropE
             />
             
             <Typography variant="h6" sx={{ color: "white" }}>Quick Feedback</Typography>
+            
             <Grid2 container spacing={1.5}>
                 {[
                     { label: "Was Disabled", key: "disabled" },
@@ -468,7 +576,7 @@ function TimerPostmatch({ data, cropStart: initialCropStart, setCropStart, cropE
 }
 
 // Main Timer Content - with match timing and audio detection
-function TimerContent({ submittedTimes, setSubmittedTimes, setMatchEnded, setAudioBlobRef, setAudioDataRef }) {
+function TimerContent({ data, submittedTimes, setSubmittedTimes, setMatchEnded, setAudioBlobRef, setAudioDataRef }) {
     const [matchStarted, setMatchStarted] = useState(false);
     const [matchTime, setMatchTime] = useState(0); // in seconds
     const [isRunning, setIsRunning] = useState(false);
@@ -490,6 +598,25 @@ function TimerContent({ submittedTimes, setSubmittedTimes, setMatchEnded, setAud
     const [currentShootStart, setCurrentShootStart] = useState(null);
     const [isHolding, setIsHolding] = useState(false); // Track if user is holding the button
     const holdStartTimeRef = useRef(0); // Track when hold started
+    
+    // Climb tracking state
+    const [autoClimb, setAutoClimb] = useState("No climb");
+    const [teleopClimb, setTeleopClimb] = useState("No climb");
+    
+    // Store climb values in data object for submission
+    const handleAutoClimbChange = (e, val) => {
+        if (val) {
+            setAutoClimb(val);
+            data.set(MatchStage.TELEOP, "autoClimb", val);
+        }
+    };
+    
+    const handleTeleopClimbChange = (e, val) => {
+        if (val) {
+            setTeleopClimb(val);
+            data.set(MatchStage.TELEOP, "teleopClimb", val);
+        }
+    };
 
     // Initialize audio recording (both amplitude and audio file for playback)
     const initAudioRecording = async () => {
@@ -504,8 +631,17 @@ function TimerContent({ submittedTimes, setSubmittedTimes, setMatchEnded, setAud
             analyserRef.current.fftSize = 256;
             source.connect(analyserRef.current);
             
-            // Set up MediaRecorder for audio playback
-            mediaRecorderRef.current = new MediaRecorder(stream);
+            // Set up MediaRecorder for audio playback with mobile-compatible MIME type
+            const mimeType = getSupportedMimeType();
+            
+            try {
+                mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
+            } catch (e) {
+                // Fallback if the specified MIME type doesn't work
+                console.log('MIME type not supported, using default');
+                mediaRecorderRef.current = new MediaRecorder(stream);
+            }
+            
             audioChunksRef.current = [];
             
             mediaRecorderRef.current.ondataavailable = (event) => {
@@ -558,10 +694,19 @@ function TimerContent({ submittedTimes, setSubmittedTimes, setMatchEnded, setAud
             mediaRecorderRef.current.stop();
             
             // Wait for recording to finish, then create blob
+            // Need to wait longer on mobile for the blob to be complete
             setTimeout(() => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                console.log('Audio chunks collected:', audioChunksRef.current.length);
+                
+                // Get supported MIME type for blob creation
+                const mimeType = getSupportedMimeType();
+                const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+                
+                console.log('Audio blob created:', audioBlob.size, 'bytes, type:', audioBlob.type);
                 setAudioBlobRef(audioBlob);
-            }, 100);
+            }, 500); // Increased timeout for mobile
+        } else {
+            console.log('MediaRecorder was not active');
         }
         
         if (mediaStreamRef.current) {
@@ -907,6 +1052,74 @@ function TimerContent({ submittedTimes, setSubmittedTimes, setMatchEnded, setAud
                     )}
                 </Stack>
                 
+                {/* Climb Selectors - Show only when match is running */}
+                {matchStarted && (
+                    <Box sx={{ mt: 2 }}>
+                        <Grid2 container spacing={2}>
+                            {/* Auto Climb */}
+                            <Grid2 xs={6}>
+                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', display: 'block', mb: 0.5 }}>
+                                    Auto Climb (first 15s)
+                                </Typography>
+                                <ToggleButtonGroup
+                                    value={autoClimb}
+                                    exclusive
+                                    onChange={handleAutoClimbChange}
+                                    fullWidth
+                                    size="small"
+                                    sx={{
+                                        '& .MuiToggleButton-root': {
+                                            color: 'white',
+                                            borderColor: 'rgba(255,255,255,0.3)',
+                                            py: 0.5,
+                                            fontSize: '0.75rem',
+                                        },
+                                        '& .MuiToggleButton-root.Mui-selected': {
+                                            backgroundColor: '#4CAF50',
+                                            color: 'white',
+                                        }
+                                    }}
+                                >
+                                    <ToggleButton value="No climb">None</ToggleButton>
+                                    <ToggleButton value="L1">L1</ToggleButton>
+                                    <ToggleButton value="L2">L2</ToggleButton>
+                                    <ToggleButton value="L3">L3</ToggleButton>
+                                </ToggleButtonGroup>
+                            </Grid2>
+                            {/* Teleop Climb */}
+                            <Grid2 xs={6}>
+                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', display: 'block', mb: 0.5 }}>
+                                    Teleop Climb (after 15s)
+                                </Typography>
+                                <ToggleButtonGroup
+                                    value={teleopClimb}
+                                    exclusive
+                                    onChange={handleTeleopClimbChange}
+                                    fullWidth
+                                    size="small"
+                                    sx={{
+                                        '& .MuiToggleButton-root': {
+                                            color: 'white',
+                                            borderColor: 'rgba(255,255,255,0.3)',
+                                            py: 0.5,
+                                            fontSize: '0.75rem',
+                                        },
+                                        '& .MuiToggleButton-root.Mui-selected': {
+                                            backgroundColor: '#2196F3',
+                                            color: 'white',
+                                        }
+                                    }}
+                                >
+                                    <ToggleButton value="No climb">None</ToggleButton>
+                                    <ToggleButton value="L1">L1</ToggleButton>
+                                    <ToggleButton value="L2">L2</ToggleButton>
+                                    <ToggleButton value="L3">L3</ToggleButton>
+                                </ToggleButtonGroup>
+                            </Grid2>
+                        </Grid2>
+                    </Box>
+                )}
+                
                 {/* Current shooting status */}
                 {currentShootStart !== null && (
                     <Typography variant="body1" sx={{ color: '#FF9800', textAlign: 'center', mt: 2 }}>
@@ -1122,6 +1335,7 @@ export default function TimerPage() {
                 break;
             case MatchStage.TELEOP:
                 setCurrentComponent(<TimerContent 
+                    data={data}
                     submittedTimes={submittedTimes} 
                     setSubmittedTimes={setSubmittedTimes}
                     setMatchEnded={setMatchEnded}
@@ -1148,7 +1362,7 @@ export default function TimerPage() {
             default:
                 setCurrentComponent(<TimerPrematch data={data} />);
         }
-    }, [stage, submittedTimes, matchEnded]);
+    }, [stage, submittedTimes, matchEnded, audioBlobRef, audioDataRef, cropStart, cropEnd]);
 
     const getStageTitle = () => {
         switch (stage) {
@@ -1247,6 +1461,8 @@ export default function TimerPage() {
                                     const verificationCode = data.get(MatchStage.PRE_MATCH, "verificationCode");
                                     const alliance = data.get(MatchStage.PRE_MATCH, "alliance");
                                     const comments = data.get(MatchStage.POST_MATCH, "comments");
+                                    const autoClimb = data.get(MatchStage.TELEOP, "autoClimb") || "No climb";
+                                    const teleopClimb = data.get(MatchStage.TELEOP, "teleopClimb") || "No climb";
                                     // Get the adjusted shooting times (with crop applied)
                                     const shootingTimes = data.get(MatchStage.TELEOP, "shootingTimes") || submittedTimes;
                                     
@@ -1278,11 +1494,19 @@ export default function TimerPage() {
                                             verificationCode,
                                             alliance,
                                             comments,
+                                            autoClimb,
+                                            teleopClimb,
                                             shootingTimes: relativeShootingTimes,
                                             timestamp: Date.now(),
                                             totalShootingTime: relativeShootingTimes.reduce((sum, e) => sum + e.duration, 0),
                                             shootingRangeCount: relativeShootingTimes.length,
                                         });
+                                        
+                                        // Mark assignment as completed
+                                        if (name && matchNum) {
+                                            await data.markCurrentAssignmentCompleted(name, matchNum);
+                                        }
+                                        
                                         setAlert({ open: true, message: "Timer data submitted successfully!", severity: "success" });
                                         setTimeout(() => {
                                             window.location.pathname = '/';

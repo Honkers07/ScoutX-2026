@@ -2,10 +2,12 @@ import Home from "./components/pages/Home";
 import Credits from "./components/pages/Credits";
 import VideoScout from "./components/pages/VideoScout";
 import Gambling from "./components/pages/Gambling";
-import Analytics from "./components/pages/DataVisualization/Analytics";
 import DataVisualizationDisplay from "./components/pages/DataVisualization/DataVisualizationDisplay"
 import TimerPage from "./components/pages/TimerPage";
 import FuelScout from "./components/pages/FuelScout";
+import MatchAssignments from "./components/pages/MatchAssignments";
+import ScouterAssignments from "./components/pages/ScouterAssignments";
+import Assignments from "./components/pages/Assignments";
 
 
 export const Constants = {
@@ -41,6 +43,21 @@ export const Constants = {
             title: "Fuel Scout",
             path: "/fuelscout",
             component: FuelScout,
+        },
+        {
+            title: "Match Assignments",
+            path: "/match-assignments",
+            component: MatchAssignments,
+        },
+        {
+            title: "Scouter Assignments",
+            path: "/scouter-assignments",
+            component: ScouterAssignments,
+        },
+        {
+            title: "Assignments",
+            path: "/assignments",
+            component: Assignments,
         },
     ],
 

@@ -9,6 +9,7 @@ import MSPostmatch from "./matchscout/MSPostmatch";
 import MSTeleop from "./matchscout/MSTeleop";
 import CloseIcon from "@mui/icons-material/Close";
 import Gambling from "./Gambling";
+import { markAssignmentComplete, getNextAssignment } from "./AssignmentHelpers";
 
 export default function MatchScout() {
     // Memoize the `data` object and pass in `setAlert`
@@ -105,8 +106,15 @@ export default function MatchScout() {
                             color={"success"}
                             variant={"outlined"}
                             onClick={async () => {
+                                const scouterName = data.data[0]?.name;
+                                const matchNumber = data.data[0]?.match;
+                                
                                 const success = await data.submit();
                                 if (success) {
+                                    // Mark assignment as complete
+                                    if (scouterName && matchNumber) {
+                                        await markAssignmentComplete(scouterName, parseInt(matchNumber));
+                                    }
                                     handleStageChange(stage + 2);
                                 }
                             }}
