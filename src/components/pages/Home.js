@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box, Stack, Typography, Button, useMediaQuery } from "@mui/material";
 import { Constants } from "../../Constants";
 import bgImage from "../../assets/backGround.png";
@@ -14,6 +14,16 @@ export default function Home() {
   const isExtraSmallHeight = useMediaQuery("(max-height: 500px)");
   const isNarrowScreen = useMediaQuery("(max-width: 800px)");
   const isVeryNarrowScreen = useMediaQuery("(max-width: 380px)");
+
+  const handleCalculateFuel = async () => {
+    try {
+      // Call calculateFuelScored with a sample match number (e.g., 1)
+      const result = await calculateFuelScored(43);
+      console.log("Fuel Calculation Result:", result);
+    } catch (error) {
+      console.error("Error calculating fuel:", error);
+    }
+  };
 
   // Determine if we're in a phone-like scenario (small width AND small height)
   const isPhoneLayout =
@@ -47,7 +57,7 @@ export default function Home() {
         backgroundRepeat: "no-repeat",
         backgroundColor: "#1a1a1a",
         pt: isPhoneLayout ? 6 : 12,
-        pl: isPhoneLayout ? 5 : 16,
+        pl: isPhoneLayout ? 8 : 20,
       }}
     >
       {/* Title */}
@@ -99,6 +109,32 @@ export default function Home() {
       >
         Developed by Iron Claw 972
       </Typography>
+
+      <Button
+                   variant="contained"
+                   sx={{
+                       backgroundColor: "#665e5eff",
+                       color: "white",
+                       borderRadius: "8px",
+                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
+                       py: 2,
+                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
+                       fontWeight: "bold",
+                       textTransform: "none",
+                       "&:hover": { backgroundColor: "#4e5053ff" }
+                   }}
+                   onClick={async () => {
+                       try {
+                           const matchNumber = 43;
+                           const results = await calculateFuelScored(matchNumber);
+                           console.log("Fuel Scored Results:", results);
+                       } catch (error) {
+                           console.error("Error calculating fuel:", error);
+                       }
+                   }}
+               >
+                   Calculate Fuel
+               </Button>
 
       {/* Main navigation buttons - Single row for normal displays */}
       {!isTwoRowLayout && !isThreeRowLayout && (
@@ -264,7 +300,7 @@ export default function Home() {
             )}
           </Stack>
 
-          {/* Third row - 1 button */}
+          {/* Third row - 2 buttons */}
           <Stack
             direction="row"
             spacing={1.5}
@@ -277,6 +313,24 @@ export default function Home() {
               isPhoneLayout,
               isSmallScreen
             )}
+            <Button
+              variant="contained"
+              sx={{
+                backgroundColor: "#4CAF50",
+                color: "white",
+                borderRadius: isSmallScreen ? "4px" : "8px",
+                px: isSmallScreen ? 1.5 : 4,
+                py: isSmallScreen ? 1 : 2,
+                fontSize: isSmallScreen ? "0.55rem" : "1.1rem",
+                fontWeight: "bold",
+                textTransform: "none",
+                minWidth: isSmallScreen ? "70px" : "auto",
+                "&:hover": { backgroundColor: "#388E3C" },
+              }}
+              onClick={handleCalculateFuel}
+            >
+              Fuel Calc
+            </Button>
           </Stack>
         </Stack>
       )}

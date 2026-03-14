@@ -1,4 +1,3 @@
-// FuelCalculatorFinal.js - Combined implementation of FuelCalculatorKILO and FuelCalculatorGPT
 import {
   collection,
   query,
@@ -31,6 +30,7 @@ let CONFIDENCE = {
 
 let HISTORICAL_AVERAGING = {
   LOW_CONFIDENCE_THRESHOLD: 0.3,
+  MIN_TOTAL_SHOOTING_TIME_FOR_AVERAGING: 5.0,
   DECAY_RATE: 0.8,
   MIN_HISTORICAL_MATCHES: 1,
   MAX_MATCHES_TO_LOOK_BACK: 12,
@@ -42,7 +42,7 @@ let SCOUTER_DELAY = {
 };
 
 let DATA_FILTERING = {
-  MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START, // 1.0s
+  MIN_SHOOTING_TIME: SCOUTER_DELAY.END - SCOUTER_DELAY.START,
   SHOOTING_TIME_MERGE_THRESHOLD: 1.5,
   MIN_SCORE_INCREMENT: 1,
   MAX_SCORE_INCREMENT: 20,
@@ -55,9 +55,9 @@ let SCOREBOARD = {
 };
 
 let QUALITY_METRICS = {
-  MIN_SHOOTING_TIME: 2, // threshold below which rely mostly on accuracy
-  REFERENCE_SHOOTING_TIME: 10, // at this time, confidence is fully weighted
-  CONFIDENCE_WEIGHT: 0.5, // max weight for confidence when shooting time is high
+  MIN_SHOOTING_TIME: 2,
+  REFERENCE_SHOOTING_TIME: 10,
+  CONFIDENCE_WEIGHT: 0.5,
 };
 
 // Export function to set constants (for tuning)
@@ -118,6 +118,14 @@ function roundFuel(x) {
 }
 
 /**
+ * Calculate total shooting time from robot shooting times array
+ */
+export function calculateTotalShootingTime(shootingTimes) {
+  if (!Array.isArray(shootingTimes) || shootingTimes.length === 0) return 0;
+  return shootingTimes.reduce((sum, t) => sum + (Number(t.duration) || 0), 0);
+}
+
+/**
  * Calculate quality metric for a robot
  * Combines confidence (per-robot) with accuracy (alliance-wide)
  * Confidence is weighted by shooting time - more shooting time = more weight on confidence
@@ -126,20 +134,15 @@ export function calculateQuality(robot, accuracy) {
   const shootingTime = Number(robot.shootingTime ?? 0);
   const confidence = Number(robot.confidence ?? 0);
 
-  // If shooting time is below threshold, rely primarily on accuracy
   if (shootingTime < QUALITY_METRICS.MIN_SHOOTING_TIME) {
     return accuracy;
   }
 
-  // Calculate confidence weight based on shooting time
-  // At REFERENCE_SHOOTING_TIME, confidence gets full weight
   const confidenceWeight = Math.min(
     shootingTime / QUALITY_METRICS.REFERENCE_SHOOTING_TIME,
     1.0
   );
 
-  // When there's lots of shooting time, confidence matters more
-  // When there's little shooting time, accuracy matters more
   const weightedConfidence =
     confidence * confidenceWeight * QUALITY_METRICS.CONFIDENCE_WEIGHT;
   const weightedAccuracy =
@@ -249,7 +252,7 @@ export function cropToActiveHub(shootingTimes, hubActivePeriods) {
 
 /**
  * Filters score timeline to only include fuel-related increments
- * Using >= MIN and <= MAX (from GPT - more precise)
+ * Using >= MIN and <= MAX
  */
 export function filterFuelIncrements(scoreTimeline) {
   if (!Array.isArray(scoreTimeline) || scoreTimeline.length === 0) return [];
@@ -382,12 +385,21 @@ export function estimateBallPerSecond(
   currentConfidence,
   matchDataTeams,
   teamNumber,
+  totalShootingTime,
   decayRate = HISTORICAL_AVERAGING.DECAY_RATE
 ) {
   const confC = clamp01(currentConfidence);
   const bpsC = Number(currentBps ?? 0);
+  const shootingTime = Number(totalShootingTime ?? 0);
 
-  if (confC >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD) return bpsC;
+  // Only use historical averaging when confidence < threshold
+  // AND total shooting time > minimum threshold
+  if (
+    confC >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD ||
+    shootingTime <= HISTORICAL_AVERAGING.MIN_TOTAL_SHOOTING_TIME_FOR_AVERAGING
+  ) {
+    return bpsC;
+  }
 
   const historical = (matchDataTeams || []).filter(
     (t) => t.teamNumber === teamNumber
@@ -395,15 +407,19 @@ export function estimateBallPerSecond(
   if (historical.length < HISTORICAL_AVERAGING.MIN_HISTORICAL_MATCHES)
     return bpsC;
 
+  // Current match still uses current confidence as weight
   let weightedSum = bpsC * confC;
   let weightSum = confC;
 
   for (const m of historical) {
     const matchesAgo = Math.max(1, Number(m.matchesAgo ?? 1));
     const recencyFactor = Math.pow(decayRate, matchesAgo);
-    const w = clamp01(m.confidence) * recencyFactor;
-    weightedSum += Number(m.ballsPerSecond ?? 0) * w;
-    weightSum += w;
+
+    // Historical matches use QUALITY instead of confidence
+    const weight = clamp01(m.quality ?? 0) * recencyFactor;
+
+    weightedSum += Number(m.ballsPerSecond ?? 0) * weight;
+    weightSum += weight;
   }
 
   return weightSum > 0 ? weightedSum / weightSum : bpsC;
@@ -497,7 +513,6 @@ async function getTimerScoutData(matchNumber) {
 }
 
 async function getFuelScoutData(matchNumber) {
-  // Try both match and matchNumber as string (from GPT)
   const c = collection(firebase, "fuelScoutData");
 
   const qMatch = query(c, where("match", "==", String(matchNumber)));
@@ -513,7 +528,6 @@ async function getFuelScoutData(matchNumber) {
 }
 
 async function getMatchDataHistory(matchNumber, teamNumber) {
-  // Fully implemented from GPT
   const qy = query(
     collection(firebase, "matchData"),
     where("matchNumber", "<", Number(matchNumber)),
@@ -537,6 +551,7 @@ async function getMatchDataHistory(matchNumber, teamNumber) {
       teamNumber: Number(teamNumber),
       ballsPerSecond: Number(entry.ballsPerSecond ?? 0),
       confidence: clamp01(entry.confidence),
+      quality: Number(entry.quality ?? entry.confidence ?? 0),
       matchesAgo: ago,
     });
   }
@@ -698,23 +713,32 @@ async function runVideoMethodForAlliance({
 
   const bps = [...rawBps];
 
-  // Get historical data for low confidence teams
+  const totalShootingTimes = allianceTeams.map((t) =>
+    calculateTotalShootingTime(t.shootingTimesAdjustedCropped || [])
+  );
+
+  // Get historical data only for teams that meet BOTH conditions:
+  // low confidence AND enough total shooting time
   const histories = await Promise.all(
     allianceTeams.map(async (t, idx) => {
-      if (confidence[idx] >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD)
-        return [];
+      const shouldUseHistorical =
+        confidence[idx] < HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD &&
+        totalShootingTimes[idx] >
+          HISTORICAL_AVERAGING.MIN_TOTAL_SHOOTING_TIME_FOR_AVERAGING;
+
+      if (!shouldUseHistorical) return [];
       return getMatchDataHistory(matchNumber, t.teamNumber);
     })
   );
 
-  // Apply historical averaging for low confidence
   for (let i = 0; i < allianceTeams.length; i++) {
     const teamNumber = allianceTeams[i].teamNumber;
     bps[i] = estimateBallPerSecond(
       rawBps[i],
       confidence[i],
       histories[i],
-      teamNumber
+      teamNumber,
+      totalShootingTimes[i]
     );
   }
 
@@ -746,9 +770,8 @@ async function runVideoMethodForAlliance({
     const teleFuel = fuelTeleByRobot[idx];
     const totalFuel = autoFuel + teleFuel;
 
-    const shootingTime = (t.shootingTimesAdjustedCropped || []).reduce(
-      (s, x) => s + (x.duration || 0),
-      0
+    const shootingTime = calculateTotalShootingTime(
+      t.shootingTimesAdjustedCropped || []
     );
 
     return {
@@ -879,7 +902,6 @@ export async function calculateFuelScored(matchNumber) {
   }
 
   if (canVideo) {
-    // Video Method
     const autoWinner = determineAutoWinner(videoScore);
     const redPeriods = getHubActivePeriods("red", autoWinner);
     const bluePeriods = getHubActivePeriods("blue", autoWinner);
@@ -966,8 +988,6 @@ export async function calculateFuelScored(matchNumber) {
           ? calculatedBlueFuel / actualBlueFuel.totalFuel
           : 0;
 
-      // Apply percentage-based adjustment to each robot
-      // Each robot's autoFuel should sum to actual auto fuel, same for tele
       const adjustByPercentages = (
         results,
         actualFuel,
@@ -975,13 +995,11 @@ export async function calculateFuelScored(matchNumber) {
         calculatedTele
       ) => {
         return results.map((r) => {
-          // Calculate percentages based on alliance totals
           const autoPercentage =
             calculatedAuto > 0 ? r.autoFuel / calculatedAuto : 0;
           const telePercentage =
             calculatedTele > 0 ? r.teleFuel / calculatedTele : 0;
 
-          // Apply percentages to actual alliance fuel
           const adjustedAutoFuel = roundFuel(
             autoPercentage * actualFuel.autoFuel
           );
@@ -1013,13 +1031,37 @@ export async function calculateFuelScored(matchNumber) {
 
       return [
         ...adjustedRedRes.map((r) => ({
-          ...r,
+          team: r.team,
+          match: r.match,
+          alliance: r.alliance,
+          autoFuel: r.autoFuel,
+          teleFuel: r.teleFuel,
+          totalFuel: r.totalFuel,
+          ballsPerSec: r.ballsPerSec,
+          shootingTime: r.shootingTime,
+          method: r.method,
+          autoClimb: r.autoClimb,
+          teleClimb: r.teleClimb,
+          quickFeedback: r.quickFeedback,
           accuracy: redAccuracy,
+          confidence: r.confidence,
           quality: calculateQuality(r, redAccuracy),
         })),
         ...adjustedBlueRes.map((r) => ({
-          ...r,
+          team: r.team,
+          match: r.match,
+          alliance: r.alliance,
+          autoFuel: r.autoFuel,
+          teleFuel: r.teleFuel,
+          totalFuel: r.totalFuel,
+          ballsPerSec: r.ballsPerSec,
+          shootingTime: r.shootingTime,
+          method: r.method,
+          autoClimb: r.autoClimb,
+          teleClimb: r.teleClimb,
+          quickFeedback: r.quickFeedback,
           accuracy: blueAccuracy,
+          confidence: r.confidence,
           quality: calculateQuality(r, blueAccuracy),
         })),
       ];
@@ -1055,7 +1097,7 @@ export async function calculateFuelScored(matchNumber) {
     const autoFuel = avgBps * autoTime;
     const teleFuel = avgBps * teleTime;
 
-    const shootingTime = adjusted.reduce((s, x) => s + (x.duration || 0), 0);
+    const shootingTime = calculateTotalShootingTime(adjusted);
 
     const autoFuelRounded = roundFuel(autoFuel);
     const teleFuelRounded = roundFuel(teleFuel);
@@ -1069,7 +1111,6 @@ export async function calculateFuelScored(matchNumber) {
       totalFuel: autoFuelRounded + teleFuelRounded,
       ballsPerSec: avgBps,
       shootingTime,
-      confidence: -1,
       method: "basic",
       autoClimb: typeof tDoc.autoClimb === "number" ? tDoc.autoClimb : 0,
       teleClimb: typeof tDoc.teleopClimb === "number" ? tDoc.teleopClimb : 0,
@@ -1110,8 +1151,6 @@ export async function calculateFuelScored(matchNumber) {
       ? calculatedBlueFuel / actualBlueFuel.totalFuel
       : 0;
 
-  // Apply percentage-based adjustment for basic method
-  // Each robot's autoFuel should sum to actual auto fuel, same for tele
   const adjustBasicByPercentages = (
     results,
     actualFuel,
@@ -1119,13 +1158,11 @@ export async function calculateFuelScored(matchNumber) {
     calculatedTele
   ) => {
     return results.map((r) => {
-      // Calculate percentages based on alliance totals
       const autoPercentage =
         calculatedAuto > 0 ? r.autoFuel / calculatedAuto : 0;
       const telePercentage =
         calculatedTele > 0 ? r.teleFuel / calculatedTele : 0;
 
-      // Apply percentages to actual alliance fuel
       const adjustedAutoFuel = roundFuel(autoPercentage * actualFuel.autoFuel);
       const adjustedTeleFuel = roundFuel(telePercentage * actualFuel.teleFuel);
 
@@ -1153,14 +1190,32 @@ export async function calculateFuelScored(matchNumber) {
 
   return [
     ...adjustedRedResults.map((r) => ({
-      ...r,
-      accuracy: redAccuracy,
-      quality: calculateQuality(r, redAccuracy),
+      team: r.team,
+      match: r.match,
+      alliance: r.alliance,
+      autoFuel: r.autoFuel,
+      teleFuel: r.teleFuel,
+      totalFuel: r.totalFuel,
+      ballsPerSec: r.ballsPerSec,
+      shootingTime: r.shootingTime,
+      method: r.method,
+      autoClimb: r.autoClimb,
+      teleClimb: r.teleClimb,
+      quickFeedback: r.quickFeedback,
     })),
     ...adjustedBlueResults.map((r) => ({
-      ...r,
-      accuracy: blueAccuracy,
-      quality: calculateQuality(r, blueAccuracy),
+      team: r.team,
+      match: r.match,
+      alliance: r.alliance,
+      autoFuel: r.autoFuel,
+      teleFuel: r.teleFuel,
+      totalFuel: r.totalFuel,
+      ballsPerSec: r.ballsPerSec,
+      shootingTime: r.shootingTime,
+      method: r.method,
+      autoClimb: r.autoClimb,
+      teleClimb: r.teleClimb,
+      quickFeedback: r.quickFeedback,
     })),
   ];
 }
