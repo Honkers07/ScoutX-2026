@@ -48,8 +48,8 @@ const TeamGraphs = ({ matches }) => {
     const scatterData = matchData
       .filter((match) => match.matchNumber !== "Average") // Exclude "Average" row
       .map((match) => ({
-        ballsPerSecond: match.ballsPerSecond || 0,
-        shootingTime: match.shootingTime || 0,
+        ballsPerSecond: Number((match.ballsPerSecond || 0).toFixed(1)),
+        shootingTime: Number((match.shootingTime || 0).toFixed(1)),
         matchNumber: match.matchNumber,
       }));
 
@@ -282,9 +282,9 @@ const TeamGraphs = ({ matches }) => {
                       Match Number: {matchNumber}
                     </strong>
                     <br />
-                    Balls Per Second: {ballsPerSecond}
+                    Balls Per Second: {Number(ballsPerSecond.toFixed(1))}
                     <br />
-                    Shooting Time: {shootingTime}s
+                    Shooting Time: {Number(shootingTime.toFixed(1))}s
                   </div>
                 );
               }

@@ -95,9 +95,11 @@ const TeamMatches = () => {
             teleClimb: teamInfo.teleClimb || 0,
             totalClimb: (teamInfo.autoClimb || 0) + (teamInfo.teleClimb || 0),
             comments: teamInfo.comments || "None",
-            quickFeedback: Array.isArray(teamInfo.quickFeedback)
-              ? teamInfo.quickFeedback.join(", ")
-              : "None",
+            quickFeedback:
+              Array.isArray(teamInfo.quickFeedback) &&
+              teamInfo.quickFeedback.length > 0
+                ? teamInfo.quickFeedback.join(", ")
+                : "None",
           };
         })
         .filter(Boolean);
@@ -430,12 +432,12 @@ const TeamMatches = () => {
                             )}
                           </TableCell>
                           {columns.map((column) => (
-                              <TableCell key={column} sx={{ color: "white" }}>
-                                {typeof match[column] === "number"
-                                  ? Number(match[column].toFixed(1))
-                                  : match[column]}
-                              </TableCell>
-                            ))}
+                            <TableCell key={column} sx={{ color: "white" }}>
+                              {typeof match[column] === "number"
+                                ? Number(match[column].toFixed(1))
+                                : match[column]}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       ))}
                     </TableBody>

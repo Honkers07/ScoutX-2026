@@ -62,7 +62,6 @@ const defaultData = [
     match: "",
     name: "",
     alliance: "",
-    start_position: "",
   },
   {
     autostage: MatchStage.AUTO,
@@ -148,7 +147,7 @@ export default class MatchScoutData {
         assignment.match?.toString() || matchNumber.toString();
       this.data[MatchStage.PRE_MATCH]["alliance"] = assignment.alliance;
       this.data[MatchStage.PRE_MATCH]["start_position"] =
-        assignment.position?.toString() || "";
+        assignment.position.toString();
       this.data[MatchStage.PRE_MATCH]["verificationCode"] =
         assignment.verificationCode || "";
 
@@ -173,10 +172,10 @@ export default class MatchScoutData {
 
     if (nextAssignment) {
       this.data[MatchStage.PRE_MATCH]["match"] =
-        nextAssignment.match?.toString() || "";
-      this.data[MatchStage.PRE_MATCH]["alliance"] = nextAssignment.alliance || "";
+        nextAssignment.match.toString();
+      this.data[MatchStage.PRE_MATCH]["alliance"] = nextAssignment.alliance;
       this.data[MatchStage.PRE_MATCH]["start_position"] =
-        nextAssignment.position?.toString() || "";
+        nextAssignment.position.toString();
       this.data[MatchStage.PRE_MATCH]["verificationCode"] =
         nextAssignment.verificationCode || "";
 
@@ -591,7 +590,6 @@ export default class MatchScoutData {
       this.data[0]["match"] === "" ||
       this.data[0]["name"] === "" ||
       this.data[0]["alliance"] === "" ||
-      this.data[0]["start_position"] === "" ||
       this.data[0]["verificationCode"] === "";
 
     if (

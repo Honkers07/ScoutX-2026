@@ -132,7 +132,6 @@ function TimerPrematch({ data }) {
           SelectProps={{ native: true }}
         >
           <option value="" style={{ color: "white", backgroundColor: "#333" }}>
-            Select Alliance
           </option>
           <option
             value="Blue"
