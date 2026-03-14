@@ -13,7 +13,7 @@ export default function Home() {
   const isVerySmallScreen = useMediaQuery("(max-width: 600px)");
   const isExtraSmallHeight = useMediaQuery("(max-height: 500px)");
   const isNarrowScreen = useMediaQuery("(max-width: 800px)");
-  const isVeryNarrowScreen = useMediaQuery("(max-width: 380px)");
+  const isVeryNarrowScreen = useMediaQuery("(max-width: 400px)");
 
   const handleCalculateFuel = async () => {
     try {
@@ -109,32 +109,6 @@ export default function Home() {
       >
         Developed by Iron Claw 972
       </Typography>
-
-      <Button
-                   variant="contained"
-                   sx={{
-                       backgroundColor: "#665e5eff",
-                       color: "white",
-                       borderRadius: "8px",
-                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
-                       py: 2,
-                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
-                       fontWeight: "bold",
-                       textTransform: "none",
-                       "&:hover": { backgroundColor: "#4e5053ff" }
-                   }}
-                   onClick={async () => {
-                       try {
-                           const matchNumber = 43;
-                           const results = await calculateFuelScored(matchNumber);
-                           console.log("Fuel Scored Results:", results);
-                       } catch (error) {
-                           console.error("Error calculating fuel:", error);
-                       }
-                   }}
-               >
-                   Calculate Fuel
-               </Button>
 
       {/* Main navigation buttons - Single row for normal displays */}
       {!isTwoRowLayout && !isThreeRowLayout && (
@@ -313,24 +287,6 @@ export default function Home() {
               isPhoneLayout,
               isSmallScreen
             )}
-            <Button
-              variant="contained"
-              sx={{
-                backgroundColor: "#4CAF50",
-                color: "white",
-                borderRadius: isSmallScreen ? "4px" : "8px",
-                px: isSmallScreen ? 1.5 : 4,
-                py: isSmallScreen ? 1 : 2,
-                fontSize: isSmallScreen ? "0.55rem" : "1.1rem",
-                fontWeight: "bold",
-                textTransform: "none",
-                minWidth: isSmallScreen ? "70px" : "auto",
-                "&:hover": { backgroundColor: "#388E3C" },
-              }}
-              onClick={handleCalculateFuel}
-            >
-              Fuel Calc
-            </Button>
           </Stack>
         </Stack>
       )}

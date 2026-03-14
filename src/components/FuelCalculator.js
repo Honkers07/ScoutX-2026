@@ -437,14 +437,6 @@ function getAutoFuelFromTimeline(scoreTimeline) {
 }
 
 function determineAutoWinner(videoScoreDoc) {
-  // TEMPORARY FIX FOR MATCH 43 - assume blue won
-  if (
-    videoScoreDoc?.matchNumber === 43 ||
-    videoScoreDoc?.matchNumber === "43"
-  ) {
-    return "blue";
-  }
-
   const redAuto = getAutoFuelFromTimeline(
     videoScoreDoc?.redScoreTimeline || []
   );
