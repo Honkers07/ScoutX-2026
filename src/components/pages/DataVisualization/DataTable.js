@@ -14,6 +14,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Typography,
 } from "@mui/material";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
 
@@ -27,8 +28,18 @@ const DataTable = () => {
   const matchDataRef = collection(firebase, "matchData");
 
   const calculateAverages = (teamDocs) => {
+    // Sort teamDocs by match number to get last 5 matches
+    const sortedDocs = [...teamDocs].sort((a, b) => {
+      const matchA = a.doc.data().matchNumber || 0;
+      const matchB = b.doc.data().matchNumber || 0;
+      return matchA - matchB;
+    });
+
+    // Use last 5 matches (or all if less than 5)
+    const last5Docs = sortedDocs.slice(-5);
+
     // teamDocs is now an array of { doc: document, teamData: team data }
-    const totals = teamDocs.reduce(
+    const totals = last5Docs.reduce(
       (acc, item) => {
         const teamData = item.teamData;
 
@@ -167,6 +178,12 @@ const DataTable = () => {
 
   return (
     <>
+      <Typography
+        variant="caption"
+        sx={{ display: "block", mb: 1, color: "gray" }}
+      >
+        * Averages are calculated from the last 5 matches
+      </Typography>
       <Table
         sx={{
           width: "100%",

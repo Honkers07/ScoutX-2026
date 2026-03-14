@@ -46,6 +46,7 @@ const TeamMatches = () => {
     "autoClimb",
     "teleClimb",
     "totalClimb",
+    "dataQuality",
     "comments",
     "quickFeedback",
   ];
@@ -94,6 +95,7 @@ const TeamMatches = () => {
             autoClimb: teamInfo.autoClimb || 0,
             teleClimb: teamInfo.teleClimb || 0,
             totalClimb: (teamInfo.autoClimb || 0) + (teamInfo.teleClimb || 0),
+            dataQuality: teamInfo.quality || 0,
             comments: teamInfo.comments || "None",
             quickFeedback:
               Array.isArray(teamInfo.quickFeedback) &&
@@ -138,8 +140,11 @@ const TeamMatches = () => {
 
     if (filteredMatchData.length === 0) return [];
 
-    let averageMatch = { matchNumber: "Average" };
-    const numMatches = filteredMatchData.length;
+    // Use last 5 matches for average (or all if less than 5)
+    const last5Matches = filteredMatchData.slice(-5);
+    const numMatches = last5Matches.length;
+
+    let averageMatch = { matchNumber: "Average (Last 5)" };
     const sumFields = {
       autoFuel: 0,
       teleFuel: 0,
@@ -149,10 +154,11 @@ const TeamMatches = () => {
       autoClimb: 0,
       teleClimb: 0,
       totalClimb: 0,
+      dataQuality: 0,
     };
 
-    // Sum up all numerical fields
-    filteredMatchData.forEach((match) => {
+    // Sum up all numerical fields from last 5 matches
+    last5Matches.forEach((match) => {
       sumFields.autoFuel += match.autoFuel || 0;
       sumFields.teleFuel += match.teleFuel || 0;
       sumFields.totalFuel += match.totalFuel || 0;
@@ -161,6 +167,7 @@ const TeamMatches = () => {
       sumFields.autoClimb += match.autoClimb || 0;
       sumFields.teleClimb += match.teleClimb || 0;
       sumFields.totalClimb += match.totalClimb || 0;
+      sumFields.dataQuality += match.quality || 0;
     });
 
     // Compute averages
@@ -187,6 +194,9 @@ const TeamMatches = () => {
     );
     averageMatch.totalClimb = parseFloat(
       (sumFields.totalClimb / numMatches).toFixed(1)
+    );
+    averageMatch.dataQuality = parseFloat(
+      (sumFields.dataQuality / numMatches).toFixed(2)
     );
     averageMatch.comments = "N/A";
     averageMatch.quickFeedback = "N/A";
@@ -284,8 +294,8 @@ const TeamMatches = () => {
   const sortedData = matches.map((teamData) => ({
     ...teamData,
     matchData: [...teamData.matchData].sort((a, b) => {
-      if (a.matchNumber === "Average") return -1;
-      if (b.matchNumber === "Average") return 1;
+      if (a.matchNumber === "Average (Last 5)") return -1;
+      if (b.matchNumber === "Average (Last 5)") return 1;
 
       const valueA = a[sortBy];
       const valueB = b[sortBy];
@@ -307,7 +317,15 @@ const TeamMatches = () => {
     if (column === "teleFuel") return "Tele Fuel";
     if (column === "totalFuel") return "Total Fuel";
     if (column === "comments") return "Comments";
+    if (column === "dataQuality") return "Data Quality";
     return column.replace(/([a-z])([A-Z])/g, "$1 $2");
+  };
+
+  // Get color for data quality
+  const getDataQualityColor = (quality) => {
+    if (quality < 0.5) return "red";
+    if (quality < 0.75) return "yellow";
+    return "green";
   };
 
   return (
@@ -335,6 +353,13 @@ const TeamMatches = () => {
           {error}
         </Typography>
       )}
+
+      <Typography
+        variant="caption"
+        sx={{ display: "block", mt: 1, color: "gray" }}
+      >
+        * Averages are calculated from the last 5 matches
+      </Typography>
 
       {matches.length > 0 && (
         <Stack direction={"column"} spacing={4} mt={9}>
@@ -415,7 +440,7 @@ const TeamMatches = () => {
                           }}
                         >
                           <TableCell>
-                            {match.matchNumber !== "Average" ? (
+                            {match.matchNumber !== "Average (Last 5)" ? (
                               <IconButton
                                 sx={{ color: "primary", fontSize: 20 }}
                                 onClick={() =>
@@ -432,7 +457,17 @@ const TeamMatches = () => {
                             )}
                           </TableCell>
                           {columns.map((column) => (
-                            <TableCell key={column} sx={{ color: "white" }}>
+                            <TableCell
+                              key={column}
+                              sx={{
+                                color:
+                                  column === "dataQuality"
+                                    ? getDataQualityColor(match.quality)
+                                    : "white",
+                                fontWeight:
+                                  column === "dataQuality" ? "bold" : "normal",
+                              }}
+                            >
                               {typeof match[column] === "number"
                                 ? Number(match[column].toFixed(1))
                                 : match[column]}
