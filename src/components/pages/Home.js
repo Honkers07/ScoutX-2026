@@ -156,7 +156,7 @@ export default function Home() {
           )}
           {renderScoutButton(
             "/flappybird",
-            "FLAPPY BIRD",
+            "Flap Flap",
             isPhoneLayout,
             isSmallScreen
           )}
@@ -220,7 +220,7 @@ export default function Home() {
             )}
             {renderScoutButton(
               "/flappybird",
-              "FLAPPY BIRD",
+              "Flap Flap",
               isPhoneLayout,
               isSmallScreen
             )}
