@@ -1,11 +1,29 @@
-import { Box, Button, TextField, Typography, Table, TableBody, TableCell, TableHead, TableRow, TableSortLabel, TableContainer, CircularProgress, Select, MenuItem, FormControl, InputLabel, IconButton, Divider, useMediaQuery } from "@mui/material";
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  TableContainer,
+  Divider,
+  useMediaQuery,
+  Stack,
+  IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import firebase from "../../../firebase";
-import { ElementPointsTele, ElementPointsAuto } from "../../MatchConstants";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
 import TeamGraphs from "./TeamGraphs";
-import { Stack } from "@mui/system";
 
 const TeamMatches = () => {
   const [team, setTeam] = useState("");
@@ -15,327 +33,86 @@ const TeamMatches = () => {
   const [sortDirection, setSortDirection] = useState("asc");
   const [error, setError] = useState(""); // To track errors
   const [restoreMatch, setRestoreMatch] = useState(""); // Selected match to restore
-  const [teamToRestore, setTeamToRestore] = useState(""); 
-  const [clearFilter, setClearFilter] = useState(true);
+  const [teamToRestore, setTeamToRestore] = useState("");
 
-  const coralFilterFields = [
-    "CoralCycles",
-    "CoralAccuracy", 
-    "CoralGroundIntakes", 
-    "CoralStationIntakes", 
-    "AutoCoralL1",
-    "AutoCoralL2",
-    "AutoCoralL3",
-    "AutoCoralL4",
-    "AutoMissedCoralL1",
-    "AutoMissedCoralL2",
-    "AutoMissedCoralL3",
-    "AutoMissedCoralL4",
-    "TeleCoralL1",
-    "TeleCoralL2",
-    "TeleCoralL3",
-    "TeleCoralL4",
-    "TeleMissedCoralL1",
-    "TeleMissedCoralL2",
-    "TeleMissedCoralL3",
-    "TeleMissedCoralL4",
-  ]
+  // Column fields for the new data structure
+  const columns = [
+    "matchNumber",
+    "autoFuel",
+    "teleFuel",
+    "totalFuel",
+    "ballsPerSecond",
+    "shootingTime",
+    "autoClimb",
+    "teleClimb",
+    "totalClimb",
+    "comments",
+    "quickFeedback",
+  ];
 
-  const algaeFilterFields = [
-    "AlgaeCycles",
-    "AlgaeAccuracy",
-    "AlgaeGroundIntakes", 
-    "AlgaeReefIntakes", 
-    "AutoAlgaeNet", 
-    "AutoAlgaeProcessor", 
-    "AutoMissedAlgaeNet", 
-    "AutoMissedAlgaeProcessor", 
-    "TeleAlgaeNet",
-    "TeleAlgaeProcessor",
-    "TeleMissedAlgaeNet",
-    "TeleMissedAlgaeProcessor",
-  ]
+  const matchDataRef = collection(firebase, "matchData");
 
-  const otherFilterFields = [
-    "Points",
-    "Cycles", 
-    "Leave",
-    "Climb",
-    "Extra Information",
-    "Comments", 
-    "Human Player Makes",
-    "Human Player Misses",
-    "Human Player Accuracy",  
-  ]
-
-  const [coralFilters, setCoralFilters] = useState(coralFilterFields); 
-  const [algaeFilters, setAlgaeFilters] = useState(algaeFilterFields); 
-  const [otherFilters, setOtherFilters] = useState(otherFilterFields); 
-
-  const matchScoutDataRef = collection(firebase, "matchScoutData");
-  const humanPlayerDataRef = collection(firebase, "humanPlayerData");
-  
   const handleGetData = async () => {
     setError(""); // Reset error message
 
     try {
-      const querySnapshot = await getDocs(matchScoutDataRef);
+      const querySnapshot = await getDocs(matchDataRef);
 
-      const humanPlayerQuerySnapshot = await getDocs(humanPlayerDataRef);
-
-      let teamDocs = [];
-      // if (team === '972!1') {
-      //   teamDocs = querySnapshot.docs.filter((doc) => {
-      //     const docId = doc.id.split('_')[0]; 
-      //     return docId === '972';
-      //   });
-      // } else if (team === '972') {
-      //   setError('Unable to provide data for 972');
-      //   setTeam("");
-      //   return;
-      // } else {
-        teamDocs = querySnapshot.docs.filter((doc) => {
-          const docId = doc.id.split('_')[0]; 
-          return docId === team;
-        });
-      // }
-
-      console.log("dataaaa: ", teamDocs); 
-
-      const humanPlayerDocs = humanPlayerQuerySnapshot.docs.filter((doc) => {
-        const docId = doc.id.split('_')[0];
-        return docId === team;
+      // Filter documents for the specified team
+      const teamDocs = querySnapshot.docs.filter((doc) => {
+        const data = doc.data();
+        const teams = data.teams || [];
+        return teams.some((t) => Number(t.teamNumber) === Number(team));
       });
 
       if (teamDocs.length === 0) {
         setError("No matches found for this team number");
-        setTeam(""); 
-        return; 
+        setTeam("");
+        return;
       }
 
-      const humanPlayerData = {}; 
-      humanPlayerDocs.forEach((doc) => {
-        const data = doc.data();
-        const matchNumber = doc.id.split('_')[1];
-        humanPlayerData[matchNumber] = {
-          hits: data.hits || 0,
-          misses: data.misses || 0,
-          accuracy: data.hits + data.misses > 0 
-            ? ((data.hits / (data.hits + data.misses)) * 100).toFixed(1) + '%'
-            : '0%'
-      }});
+      // Process match data
+      const matchData = teamDocs
+        .map((doc) => {
+          const data = doc.data();
+          const teams = data.teams || [];
 
-      const fields = [
-        "leave",
-        "AutoAlgaeNet",
-        "AutoAlgaeProcessor",
-        "AutoMissedAlgaeNet",
-        "AutoMissedAlgaeProcessor",
-        "AutoCoralL1",
-        "AutoCoralL2",
-        "AutoCoralL3",
-        "AutoCoralL4",
-        "AutoMissedCoralL1",
-        "AutoMissedCoralL2",
-        "AutoMissedCoralL3",
-        "AutoMissedCoralL4",
-        "TeleAlgaeNet",
-        "TeleAlgaeProcessor",
-        "TeleMissedAlgaeNet",
-        "TeleMissedAlgaeProcessor",
-        "TeleCoralL1",
-        "TeleCoralL2",
-        "TeleCoralL3",
-        "TeleCoralL4",
-        "TeleMissedCoralL1",
-        "TeleMissedCoralL2",
-        "TeleMissedCoralL3",
-        "TeleMissedCoralL4",
-        "ClimbPosition",
-      ];
+          // Find this team's data in the match
+          const teamInfo = teams.find(
+            (t) => Number(t.teamNumber) === Number(team)
+          );
 
-      const extraInfo = [
-        "intakeBroken",
-        "outtakeBroken",
-        "elevatorBroken",
-        "armBroken",
-        "brownsOut",
-        "wobbly",
-        "canKnockAlgae",
-        "missesOuttakesConsistently",
-        "slowIntakes",
-        "disabled",
-        "goodDefenseFromOpponents",
-        "playedMajorityDefense",
-        "touchItOwnIt",
-        "aStopped",
-        "eStopped",
-        "knockedCage",
-        "failedClimb",
-      ];
+          if (!teamInfo) return null;
 
-      const Points = [
-        { field: 'Leave', multiplier: ElementPointsAuto.LEAVE },
-        { field: 'AutoAlgaeNet', multiplier: ElementPointsAuto.ALGAENET },
-        { field: 'AutoAlgaeProcessor', multiplier: ElementPointsAuto.ALGAEPROCESSOR },
-        { field: 'AutoCoralL1', multiplier: ElementPointsAuto.CORALL1 },
-        { field: 'AutoCoralL2', multiplier: ElementPointsAuto.CORALL2 },
-        { field: 'AutoCoralL3', multiplier: ElementPointsAuto.CORALL3 },
-        { field: 'AutoCoralL4', multiplier: ElementPointsAuto.CORALL4 },
-        { field: 'TeleAlgaeNet', multiplier: ElementPointsTele.ALGAENET },
-        { field: 'TeleAlgaeProcessor', multiplier: ElementPointsTele.ALGAEPROCESSOR },
-        { field: 'TeleCoralL1', multiplier: ElementPointsTele.CORALL1 },
-        { field: 'TeleCoralL2', multiplier: ElementPointsTele.CORALL2 },
-        { field: 'TeleCoralL3', multiplier: ElementPointsTele.CORALL3 },
-        { field: 'TeleCoralL4', multiplier: ElementPointsTele.CORALL4 },
-        { field: 'Climb', multiplier: 1 },
-      ];
-
-      const matchData = teamDocs.map((doc) => {
-        const data = doc.data();
-        let matchObject = {
-          matchNumber: data["match"], // Get match number from Firebase
-          Points: 0,
-          Cycles: 0,
-          CoralCycles: 0,
-          AlgaeCycles: 0,
-          CoralAccuracy: 0, 
-          AlgaeAccuracy: 0, 
-          CoralGroundIntakes: 0,
-          CoralStationIntakes: 0, 
-          AlgaeGroundIntakes: 0, 
-          AlgaeReefIntakes: 0,
-        };
-
-        fields.forEach((field) => {
-          if (field === "ClimbPosition") {
-            if (data[field] === "Deep") {
-              matchObject["Climb"] = ElementPointsTele.DEEP;
-            } else if (data[field] === "Shallow") {
-              matchObject["Climb"] = ElementPointsTele.SHALLOW;
-            } else if (data[field] === "Parked") {
-              matchObject["Climb"] = ElementPointsTele.PARK;
-            } else {
-              matchObject["Climb"] = 0;
-            }
-          } else if (field === 'leave') {
-            matchObject['Leave'] = data[field] === 'true' ? 1 : 0;
-          } else {
-            matchObject[field] = data[field] !== undefined ? data[field] : 0;
-          }
-        });
-
-        let points = 0;
-        let coralCycles = 0;
-        let algaeCycles = 0;
-        let coralAccuracy = 0; 
-        let algaeAccuracy = 0; 
-        let coralGroundIntakes = 0; 
-        let coralStationIntakes = 0;
-        let algaeGroundIntakes = 0;
-        let algaeReefIntakes = 0; 
-
-        const outtakeCounts = [
-          'autoOuttakeCounts', 
-          'teleOuttakeCounts'
-        ]
-
-        outtakeCounts.forEach((count) => {
-          data[count].map((intake) => {
-            const location = intake.intakeLocation; 
-            const element = intake.element; 
-            if (element === "CORAL") {
-              if (location === "GROUND") {
-                coralGroundIntakes++; 
-              }
-              else if (location === "STATION") {
-                coralStationIntakes++; 
-              }
-            }
-            if (element === "ALGAE") {
-              if (location === "GROUND") {
-                algaeGroundIntakes++; 
-              }
-              else if (location === "REEF") {
-                algaeReefIntakes++; 
-              }
-            }
-          })
+          return {
+            matchNumber: data.matchNumber,
+            autoFuel: teamInfo.autoFuel || 0,
+            teleFuel: teamInfo.teleFuel || 0,
+            totalFuel: teamInfo.totalFuel || 0,
+            ballsPerSecond: teamInfo.ballsPerSecond || 0,
+            shootingTime: teamInfo.shootingTime || 0,
+            autoClimb: teamInfo.autoClimb || 0,
+            teleClimb: teamInfo.teleClimb || 0,
+            totalClimb: (teamInfo.autoClimb || 0) + (teamInfo.teleClimb || 0),
+            comments: teamInfo.comments || "None",
+            quickFeedback: Array.isArray(teamInfo.quickFeedback)
+              ? teamInfo.quickFeedback.join(", ")
+              : "None",
+          };
         })
+        .filter(Boolean);
 
-        Points.forEach((fieldConfig) => {
-            let fieldValue = matchObject[fieldConfig.field];
-            const multiplier = fieldConfig.multiplier;
-            points += fieldValue * multiplier;
-            if (fieldConfig.field.includes("Coral")) coralCycles += fieldValue;
-            if (fieldConfig.field.includes("Algae")) algaeCycles += fieldValue;
-        });
-
-        const totalCoralAttempts = coralCycles + 
-          (matchObject["AutoMissedCoralL1"]) + 
-          (matchObject["AutoMissedCoralL2"]) + 
-          (matchObject["AutoMissedCoralL3"]) + 
-          (matchObject["AutoMissedCoralL4"]) + 
-          (matchObject["TeleMissedCoralL1"]) + 
-          (matchObject["TeleMissedCoralL2"]) + 
-          (matchObject["TeleMissedCoralL3"]) + 
-          (matchObject["TeleMissedCoralL4"]);
-
-        const totalAlgaeAttempts = algaeCycles + 
-          (matchObject["AutoMissedAlgaeNet"]) + 
-          (matchObject["AutoMissedAlgaeProcessor"]) + 
-          (matchObject["TeleMissedAlgaeNet"]) + 
-          (matchObject["TeleMissedAlgaeProcessor"]);
-
-        coralAccuracy = totalCoralAttempts > 0 ? `${((coralCycles / totalCoralAttempts) * 100).toFixed(1)}%` : "No Attempts";
-        algaeAccuracy = totalAlgaeAttempts > 0 ? `${((algaeCycles / totalAlgaeAttempts) * 100).toFixed(1)}%` : "No Attemps";
-
-        let totalCycles = coralCycles + algaeCycles;
-
-        matchObject.Points = points;
-        matchObject.Cycles = totalCycles;
-        matchObject.CoralCycles = coralCycles;
-        matchObject.AlgaeCycles = algaeCycles;
-        matchObject.CoralAccuracy = coralAccuracy; 
-        matchObject.AlgaeAccuracy = algaeAccuracy; 
-        matchObject.CoralGroundIntakes = coralGroundIntakes;
-        matchObject.CoralStationIntakes = coralStationIntakes; 
-        matchObject.AlgaeGroundIntakes = algaeGroundIntakes;
-        matchObject.AlgaeReefIntakes = algaeReefIntakes; 
-
-        let extraInfoList = [];
-        extraInfo.forEach((info) => {
-          if (data[info] === "true") {  
-            extraInfoList.push(formatExtraInfo(info));
-          }
-        });
-        matchObject["Extra Information"] = extraInfoList.join(", ") || "None";
-
-        // Add comments 
-        matchObject['Comments'] = data['comments'] !== '' ? data['comments'] : "None"; 
-
-        const humanPlayerStats = humanPlayerData[matchObject.matchNumber] || {
-          hits: 'N/A',
-          misses: 'N/A',
-          accuracy: 'N/A',
-        };
-        
-        matchObject["Human Player Makes"] = humanPlayerStats.hits;
-        matchObject["Human Player Misses"] = humanPlayerStats.misses;
-        matchObject["Human Player Accuracy"] = humanPlayerStats.accuracy;
-
-        return matchObject;
-      });
+      // Sort by match number
+      matchData.sort((a, b) => a.matchNumber - b.matchNumber);
 
       const updatedMatchData = handleAverages(matchData);
 
       // Update matches with the new matchData for this team
       setMatches((prevMatches) => [
-        ...prevMatches.filter((m) => m.team !== team),  // Remove previous data for this team
-        { team, matchData: updatedMatchData }
+        ...prevMatches.filter((m) => m.team !== team), // Remove previous data for this team
+        { team, matchData: updatedMatchData },
       ]);
       setTeam("");
-
     } catch (error) {
       console.error("Error fetching match data:", error);
       setError("Error fetching match data. Please try again.");
@@ -344,89 +121,105 @@ const TeamMatches = () => {
 
   const handleDeleteTeamData = (team) => {
     // Remove the team's data from the state
-    setMatches((prevMatches) => prevMatches.filter((teamData) => teamData.team !== team));
+    setMatches((prevMatches) =>
+      prevMatches.filter((teamData) => teamData.team !== team)
+    );
   };
 
   const handleAverages = (matchData) => {
     if (matchData.length === 1) return matchData;
 
-    // Ensure we are only working with valid matches (no "Averages")
-    const filteredMatchData = matchData.filter(match => match.matchNumber !== "Averages");
+    // Ensure we are only working with valid matches (no "Average")
+    const filteredMatchData = matchData.filter(
+      (match) => match.matchNumber !== "Average"
+    );
 
-    if (filteredMatchData.length === 0) return []; // Ensure no empty average is added
+    if (filteredMatchData.length === 0) return [];
 
-    let averageMatch = { matchNumber: "Averages" };
-    const numMatches = filteredMatchData.length; // Use filtered data for count
-    const sumFields = {};
+    let averageMatch = { matchNumber: "Average" };
+    const numMatches = filteredMatchData.length;
+    const sumFields = {
+      autoFuel: 0,
+      teleFuel: 0,
+      totalFuel: 0,
+      ballsPerSecond: 0,
+      shootingTime: 0,
+      autoClimb: 0,
+      teleClimb: 0,
+      totalClimb: 0,
+    };
 
     // Sum up all numerical fields
     filteredMatchData.forEach((match) => {
-        for (const key in match) {
-            if (typeof match[key] === "number") {
-                sumFields[key] = (sumFields[key] || 0) + match[key];
-            }
-        }
+      sumFields.autoFuel += match.autoFuel || 0;
+      sumFields.teleFuel += match.teleFuel || 0;
+      sumFields.totalFuel += match.totalFuel || 0;
+      sumFields.ballsPerSecond += match.ballsPerSecond || 0;
+      sumFields.shootingTime += match.shootingTime || 0;
+      sumFields.autoClimb += match.autoClimb || 0;
+      sumFields.teleClimb += match.teleClimb || 0;
+      sumFields.totalClimb += match.totalClimb || 0;
     });
 
     // Compute averages
-    for (const key in sumFields) {
-        averageMatch[key] = parseFloat((sumFields[key] / numMatches).toFixed(1));
-    }
+    averageMatch.autoFuel = parseFloat(
+      (sumFields.autoFuel / numMatches).toFixed(1)
+    );
+    averageMatch.teleFuel = parseFloat(
+      (sumFields.teleFuel / numMatches).toFixed(1)
+    );
+    averageMatch.totalFuel = parseFloat(
+      (sumFields.totalFuel / numMatches).toFixed(1)
+    );
+    averageMatch.ballsPerSecond = parseFloat(
+      (sumFields.ballsPerSecond / numMatches).toFixed(1)
+    );
+    averageMatch.shootingTime = parseFloat(
+      (sumFields.shootingTime / numMatches).toFixed(1)
+    );
+    averageMatch.autoClimb = parseFloat(
+      (sumFields.autoClimb / numMatches).toFixed(1)
+    );
+    averageMatch.teleClimb = parseFloat(
+      (sumFields.teleClimb / numMatches).toFixed(1)
+    );
+    averageMatch.totalClimb = parseFloat(
+      (sumFields.totalClimb / numMatches).toFixed(1)
+    );
+    averageMatch.comments = "N/A";
+    averageMatch.quickFeedback = "N/A";
 
-    // Calculate Coral and Algae accuracy
-    const totalCoralAttempts = ((sumFields["CoralCycles"] || 0) +
-        ["AutoMissedCoralL1", "AutoMissedCoralL2", "AutoMissedCoralL3", "AutoMissedCoralL4",
-        "TeleMissedCoralL1", "TeleMissedCoralL2", "TeleMissedCoralL3", "TeleMissedCoralL4"]
-        .reduce((sum, key) => sum + (sumFields[key] ?? 0), 0)) || 0; 
-
-    const totalAlgaeAttempts = ((sumFields["AlgaeCycles"] || 0) +
-        ["AutoMissedAlgaeNet", "AutoMissedAlgaeProcessor",
-        "TeleMissedAlgaeNet", "TeleMissedAlgaeProcessor"]
-        .reduce((sum, key) => sum + (sumFields[key] ?? 0), 0)) || 0; 
-
-    const coralAccuracy = totalCoralAttempts > 0 ? `${(sumFields["CoralCycles"] / totalCoralAttempts * 100).toFixed(1)}%` : "No Attempts";
-    const algaeAccuracy = totalAlgaeAttempts > 0 ? `${(sumFields["AlgaeCycles"] / totalAlgaeAttempts * 100).toFixed(1)}%` : "No Attempts";
-
-    // Construct a reordered object with CoralAccuracy and AlgaeAccuracy after AlgaeCycles
-    const reorderedAverageMatch = {};
-    for (const key in averageMatch) {
-        reorderedAverageMatch[key] = averageMatch[key];
-        if (key === "AlgaeCycles") {
-            reorderedAverageMatch["CoralAccuracy"] = coralAccuracy;
-            reorderedAverageMatch["AlgaeAccuracy"] = algaeAccuracy;
-        }
-    }
-
-    // Set placeholders for fields that shouldn't be averaged
-    reorderedAverageMatch["Extra Information"] = "N/A";
-    reorderedAverageMatch["Comments"] = "N/A"; 
-    reorderedAverageMatch["Human Player Makes"] = "N/A";
-    reorderedAverageMatch["Human Player Misses"] = "N/A";
-    reorderedAverageMatch["Human Player Accuracy"] = "N/A";
-
-    return [...filteredMatchData, reorderedAverageMatch]; // Append the updated "Averages" match
+    return [...filteredMatchData, averageMatch];
   };
-  
+
   // Ensure updates in delete and restore functions
   const handleDeleteRow = (team, matchNumber) => {
-    setError(""); // Reset error message
-  
+    setError("");
+
     const teamData = matches.find((teamData) => teamData.team === team);
-  
+
     if (teamData.matchData.length > 2) {
-      const updatedMatchData = teamData.matchData.filter(match => match.matchNumber !== matchNumber);
-  
-      const deletedMatch = teamData.matchData.find(match => match.matchNumber === matchNumber);
-  
+      const updatedMatchData = teamData.matchData.filter(
+        (match) => match.matchNumber !== matchNumber
+      );
+
+      const deletedMatch = teamData.matchData.find(
+        (match) => match.matchNumber === matchNumber
+      );
+
       const newMatchDataWithAverages = handleAverages(updatedMatchData);
-  
+
       // Update matches state
-      setMatches(matches.map(teamData =>
-        teamData.team === team ? { ...teamData, matchData: newMatchDataWithAverages } : teamData
-      ));
-  
+      setMatches(
+        matches.map((teamData) =>
+          teamData.team === team
+            ? { ...teamData, matchData: newMatchDataWithAverages }
+            : teamData
+        )
+      );
+
       // Store deleted row
-      setDeletedRows(prevState => ({
+      setDeletedRows((prevState) => ({
         ...prevState,
         [team]: [...(prevState[team] || []), deletedMatch],
       }));
@@ -434,50 +227,44 @@ const TeamMatches = () => {
       setError("At least one match is necessary for visualization");
     }
   };
-  
-    const handleRestoreRow = () => {
-      setError("");
-      setRestoreMatch("");
 
-      const matchToRestore = deletedRows[teamToRestore]?.find(
-        (match) => match.matchNumber === restoreMatch
-      );
-      
-      
-      setMatches(
-        matches.map((teamData) => {
-            if (teamData.team === teamToRestore) {
-                // Ensure previous "Averages" row is removed before recalculating
-                const updatedMatchData = [
-                    ...teamData.matchData,
-                    matchToRestore
-                ];
+  const handleRestoreRow = () => {
+    setError("");
+    setRestoreMatch("");
 
-                // Recalculate new averages with the correct data
-                const newMatchDataWithAverages = handleAverages(updatedMatchData);
+    const matchToRestore = deletedRows[teamToRestore]?.find(
+      (match) => match.matchNumber === restoreMatch
+    );
 
-                return {
-                    ...teamData,
-                    matchData: newMatchDataWithAverages,
-                };
-            }
-            return teamData;
-        })
-      );
-    
-      setDeletedRows((prevState) => ({
-        ...prevState,
-        [teamToRestore]: prevState[teamToRestore].filter(
-          (match) => match.matchNumber !== restoreMatch
-        ),
-      }));
-    };
+    setMatches(
+      matches.map((teamData) => {
+        if (teamData.team === teamToRestore) {
+          const updatedMatchData = [...teamData.matchData, matchToRestore];
+
+          const newMatchDataWithAverages = handleAverages(updatedMatchData);
+
+          return {
+            ...teamData,
+            matchData: newMatchDataWithAverages,
+          };
+        }
+        return teamData;
+      })
+    );
+
+    setDeletedRows((prevState) => ({
+      ...prevState,
+      [teamToRestore]: prevState[teamToRestore].filter(
+        (match) => match.matchNumber !== restoreMatch
+      ),
+    }));
+  };
 
   useEffect(() => {
     if (restoreMatch) {
-      handleRestoreRow();  // Only call when restoreMatch is updated
+      handleRestoreRow();
     }
-  }, [restoreMatch]); 
+  }, [restoreMatch]);
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -488,250 +275,210 @@ const TeamMatches = () => {
     }
   };
 
-   // Helper function to format extraInfo field keys
-  const formatExtraInfo = (info) => {
-    return info
-      .replace(/([a-z])([A-Z])/g, "$1 $2")  // Adds space between camelCase words
-      .replace(/^./, (str) => str.toUpperCase()); // Capitalizes the first letter
-  };
-
   // Use `useMediaQuery` to determine if the screen is small
   const isSmallScreen = useMediaQuery("(max-width: 960px)");
 
-const handleFilter = (filterType, selectedValues) => {
-  if (filterType === "coral") {
-    setCoralFilters(selectedValues);
-  } else if (filterType === "algae") {
-    setAlgaeFilters(selectedValues);
-  } else if (filterType === "other") {
-    setOtherFilters(selectedValues);
-  }
-};
+  // Sort the filtered data
+  const sortedData = matches.map((teamData) => ({
+    ...teamData,
+    matchData: [...teamData.matchData].sort((a, b) => {
+      if (a.matchNumber === "Average") return -1;
+      if (b.matchNumber === "Average") return 1;
 
-const handleClearFilter = () => {
-  if (clearFilter) {
-    setClearFilter(false); 
-    setCoralFilters([]);
-    setAlgaeFilters([]);
-    setOtherFilters([]); 
-  } else {
-    setClearFilter(true); 
-    setCoralFilters(coralFilterFields);
-    setAlgaeFilters(algaeFilterFields); 
-    setOtherFilters(otherFilterFields); 
-  }
-}
+      const valueA = a[sortBy];
+      const valueB = b[sortBy];
 
-const visibleColumns = new Set([...coralFilters, ...algaeFilters, ...otherFilters]);
+      return sortDirection === "asc" ? valueB - valueA : valueA - valueB;
+    }),
+  }));
 
-// Sort the filtered data
-const sortedData = matches.map((teamData) => ({
-  ...teamData,
-  matchData: [...teamData.matchData].sort((a, b) => {
+  // Format column name for display - capitalize first letter of every word
+  const formatColumnName = (column) => {
+    if (column === "matchNumber") return "Match Number";
+    if (column === "ballsPerSecond") return "Balls Per Second";
+    if (column === "shootingTime") return "Shooting Time";
+    if (column === "autoClimb") return "Auto Climb";
+    if (column === "teleClimb") return "Tele Climb";
+    if (column === "totalClimb") return "Total Climb";
+    if (column === "quickFeedback") return "Quick Feedback";
+    if (column === "autoFuel") return "Auto Fuel";
+    if (column === "teleFuel") return "Tele Fuel";
+    if (column === "totalFuel") return "Total Fuel";
+    if (column === "comments") return "Comments";
+    return column.replace(/([a-z])([A-Z])/g, "$1 $2");
+  };
 
-    if (a.matchNumber === "Averages") return -1; // Keep "Averages" at the top
-    if (b.matchNumber === "Averages") return 1; 
+  return (
+    <>
+      <TextField
+        label="Enter Team Number"
+        variant="outlined"
+        value={team}
+        onChange={(e) => setTeam(e.target.value)}
+        fullWidth
+        margin="normal"
+      />
+      <Button
+        variant="contained"
+        color="primary"
+        sx={{ mt: 2 }}
+        onClick={handleGetData}
+        fullWidth
+      >
+        Get Data
+      </Button>
 
-    const valueA = a[sortBy];
-    const valueB = b[sortBy];
+      {error && (
+        <Typography color="error" variant="body1" sx={{ mt: 2 }}>
+          {error}
+        </Typography>
+      )}
 
-    return sortDirection === 'asc' ? valueB - valueA : valueA - valueB;
-  }),
-}));
+      {matches.length > 0 && (
+        <Stack direction={"column"} spacing={4} mt={9}>
+          <TeamGraphs matches={matches} />
 
-return (
-  <>
-    <TextField
-      label="Enter Team Number"
-      variant="outlined"
-      value={team}
-      onChange={(e) => setTeam(e.target.value)}
-      fullWidth
-      margin="normal"
-    />
-    <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleGetData} fullWidth>
-      Get Data
-    </Button>
-
-    {error && <Typography color="error" variant="body1" sx={{ mt: 2 }}>{error}</Typography>}
-
-    {matches.length > 0 && (
-      <Stack direction={"column"} spacing={4} mt={9}>
-        <TeamGraphs matches={matches} />
-
-        <Box>
-        <Stack direction="row" spacing={2} mt={isSmallScreen ? -4 : 3}>
-          <FormControl fullWidth>
-            <Select
-              displayEmpty
-              multiple
-              value={coralFilters}
-              onChange={(e) => handleFilter("coral", e.target.value)}
-              renderValue={() => "Coral Filters"}
-            >
-              {coralFilterFields.map((field) => (
-                <MenuItem key={field} value={field}>
-                  {field.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth>
-            <Select
-              displayEmpty
-              multiple
-              value={algaeFilters}
-              onChange={(e) => handleFilter("algae", e.target.value)}
-              renderValue={() => "Algae Filters"}
-            >
-              {algaeFilterFields.map((field) => (
-                <MenuItem key={field} value={field}>
-                  {field.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth>
-            <Select
-              displayEmpty
-              multiple
-              value={otherFilters}
-              onChange={(e) => handleFilter("other", e.target.value)}
-              renderValue={() => "Other Filters"}
-            >
-              {otherFilterFields.map((field) => (
-                <MenuItem key={field} value={field}>
-                  {field.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
-        <Box mt={3} mb={isSmallScreen ? 2 : 0}>
-        <Button fullWidth onClick={handleClearFilter} variant="outlined">
-          {clearFilter ? "Clear All Filters" : "Set All Filters"}
-        </Button>
-        </Box>
-        </Box>
-
-        {/* Displaying filtered and sorted data */}
-        {sortedData.map((teamData) => (
-          <Box key={teamData.team}>
-            <TableContainer sx={{ maxWidth: '100%', margin: '0 auto', mt: isSmallScreen ? -4 : 0 }}>
-              <Stack direction={"row"} spacing={4}>
-                <IconButton
-                  sx={{ color: "primary", fontSize: 20 }}
-                  onClick={() => handleDeleteTeamData(teamData.team)}
+          <Box>
+            {/* Displaying filtered and sorted data */}
+            {sortedData.map((teamData) => (
+              <Box key={teamData.team}>
+                <TableContainer
+                  sx={{
+                    maxWidth: "100%",
+                    margin: "0 auto",
+                    mt: isSmallScreen ? -4 : 0,
+                  }}
                 >
-                  <RemoveCircleIcon />
-                </IconButton>
-                <Typography variant="h5" sx={{ color: "#f57c00", position: "relative", top: "5px" }}>
-                  {`Team ${teamData.team}`}
-                </Typography>
-              </Stack>
-              <Divider sx={{ width: '75%', backgroundColor: 'grey.800', marginY: 4, mt: 2, mb: 4 }} />
-              <Table sx={{ minWidth: 650, backgroundColor: "#f57c00" }}>
-                <TableHead sx={{ backgroundColor: "#222", color: "white" }}>
-                  <TableRow>
-                    <TableCell sx={{ color: "#f57c00", fontWeight: "bold" }}></TableCell>
-                    <TableCell sx={{ color: "#f57c00", fontWeight: "bold" }}>Match Number</TableCell>
-                    {Object.keys(teamData.matchData[0]).map((column) =>
-                      column !== "matchNumber" && visibleColumns.has(column) ? (
-                        <TableCell key={column} sx={{ color: "white" }}>
-                          <TableSortLabel
-                            active={sortBy === column}
-                            direction={sortDirection}
-                            onClick={() => handleSort(column)}
-                            sx={{
-                              color: "white",
-                              "&.MuiTableSortLabel-active": { color: "#f57c00" },
-                              "&:hover": { color: "#f57c00" },
-                            }}
-                          >
-                            {column.replace(/([a-z])([A-Z])/g, "$1 $2")}
-                          </TableSortLabel>
-                        </TableCell>
-                      ) : null
-                    )}
-                  </TableRow>
-                </TableHead>
-
-                <TableBody>
-                  {teamData.matchData.map((match, index) => (
-                    <TableRow
-                      key={match.matchNumber}
+                  <Stack direction={"row"} spacing={4}>
+                    <IconButton
+                      sx={{ color: "primary", fontSize: 20 }}
+                      onClick={() => handleDeleteTeamData(teamData.team)}
+                    >
+                      <RemoveCircleIcon />
+                    </IconButton>
+                    <Typography
+                      variant="h5"
                       sx={{
-                        backgroundColor: index % 2 === 0 ? "#333" : "#444",
-                        "&:hover": { backgroundColor: "#555" },
+                        color: "#f57c00",
+                        position: "relative",
+                        top: "5px",
                       }}
                     >
-                      <TableCell>
-                        {match.matchNumber !== "Averages" ? (
-                          <IconButton
-                            sx={{ color: "primary", fontSize: 20 }}
-                            onClick={() => handleDeleteRow(teamData.team, match.matchNumber)}
-                          >
-                          <RemoveCircleIcon />
-                          </IconButton>
-                          ) : (
-                            // Empty cell to maintain row height
-                          <Box sx={{ width: 24, height: 43 }} />
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ color: "#f57c00" }}>{match.matchNumber}</TableCell>
-                      {Object.entries(match).map(
-                        ([key, value]) =>
-                          key !== "matchNumber" && visibleColumns.has(key) && (
-                            <TableCell
-                              key={key}
+                      {`Team ${teamData.team}`}
+                    </Typography>
+                  </Stack>
+                  <Divider
+                    sx={{
+                      width: "75%",
+                      backgroundColor: "grey.800",
+                      marginY: 4,
+                      mt: 2,
+                      mb: 4,
+                    }}
+                  />
+                  <Table sx={{ minWidth: 650, backgroundColor: "#f57c00" }}>
+                    <TableHead sx={{ backgroundColor: "#222", color: "white" }}>
+                      <TableRow>
+                        <TableCell
+                          sx={{ color: "#f57c00", fontWeight: "bold" }}
+                        ></TableCell>
+                        {columns.map((column) => (
+                          <TableCell key={column} sx={{ color: "white" }}>
+                            <TableSortLabel
+                              active={sortBy === column}
+                              direction={sortDirection}
+                              onClick={() => handleSort(column)}
                               sx={{
                                 color: "white",
-                                whiteSpace: key === "Extra Information" ? "nowrap" : "normal",
+                                "&.MuiTableSortLabel-active": {
+                                  color: "#f57c00",
+                                },
+                                "&:hover": { color: "#f57c00" },
                               }}
                             >
-                              {value}
-                            </TableCell>
-                          )
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                              {formatColumnName(column)}
+                            </TableSortLabel>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
 
-            {/* Show restore dropdown and button under the team table */}
-            <Stack spacing={1} direction="column" sx={{ mt: 4 }}>
-              {deletedRows[teamData.team]?.length > 0 && (
-                <FormControl fullWidth>
-                  <InputLabel id="restore-select-label">Restore Match</InputLabel>
-                  <Select
-                    labelId="restore-select-label"
-                    value={restoreMatch}
-                    label="Restore Match"
-                    onChange={(e) => {
-                      setTeamToRestore(teamData.team)
-                      setRestoreMatch(e.target.value)}} // Handle change
-                  >
-                    {deletedRows[teamData.team].map((match) => (
-                      <MenuItem
-                        key={match.matchNumber}
-                        value={match.matchNumber}
-                      >
-                        Match {match.matchNumber}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </Stack>
+                    <TableBody>
+                      {teamData.matchData.map((match, index) => (
+                        <TableRow
+                          key={match.matchNumber}
+                          sx={{
+                            backgroundColor: index % 2 === 0 ? "#333" : "#444",
+                            "&:hover": { backgroundColor: "#555" },
+                          }}
+                        >
+                          <TableCell>
+                            {match.matchNumber !== "Average" ? (
+                              <IconButton
+                                sx={{ color: "primary", fontSize: 20 }}
+                                onClick={() =>
+                                  handleDeleteRow(
+                                    teamData.team,
+                                    match.matchNumber
+                                  )
+                                }
+                              >
+                                <RemoveCircleIcon />
+                              </IconButton>
+                            ) : (
+                              <Box sx={{ width: 24, height: 43 }} />
+                            )}
+                          </TableCell>
+                          {columns.map((column) => (
+                              <TableCell key={column} sx={{ color: "white" }}>
+                                {typeof match[column] === "number"
+                                  ? Number(match[column].toFixed(1))
+                                  : match[column]}
+                              </TableCell>
+                            ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* Show restore dropdown and button under the team table */}
+                <Stack spacing={1} direction="column" sx={{ mt: 4 }}>
+                  {deletedRows[teamData.team]?.length > 0 && (
+                    <Stack spacing={1} direction="column" sx={{ mt: 4 }}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Restore Match</InputLabel>
+                        <Select
+                          value={restoreMatch}
+                          onChange={(e) => {
+                            setTeamToRestore(teamData.team);
+                            setRestoreMatch(e.target.value);
+                          }}
+                          label="Restore Match"
+                        >
+                          <MenuItem value="">
+                            <em>Restore Match</em>
+                          </MenuItem>
+                          {deletedRows[teamData.team].map((match) => (
+                            <MenuItem
+                              key={match.matchNumber}
+                              value={match.matchNumber}
+                            >
+                              Match {match.matchNumber}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Stack>
+                  )}
+                </Stack>
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Stack>
-    )}
-  </>
-);
+        </Stack>
+      )}
+    </>
+  );
 };
 
 export default TeamMatches;
