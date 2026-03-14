@@ -6,186 +6,306 @@ import calculateFuelScored from "../FuelCalculator";
 import updateMatchData from "../UpdateMatchData";
 import tuneFuelCalculator from "../FuelCalculatorTuner";
 
-
 export default function Home() {
-   const isSmallScreen = useMediaQuery("(max-width: 960px)");
-   const isIPadScreen = useMediaQuery("(max-width: 1180px)")
-   const isIPadPro = useMediaQuery("(max-width: 1366px)")
+  const isSmallScreen = useMediaQuery("(max-width: 960px)");
+  const isIPadScreen = useMediaQuery("(max-width: 1180px)");
+  const isIPadPro = useMediaQuery("(max-width: 1366px)");
+  const isVerySmallScreen = useMediaQuery("(max-width: 600px)");
+  const isExtraSmallHeight = useMediaQuery("(max-height: 500px)");
+  const isNarrowScreen = useMediaQuery("(max-width: 800px)");
+  const isVeryNarrowScreen = useMediaQuery("(max-width: 380px)");
 
+  // Determine if we're in a phone-like scenario (small width AND small height)
+  const isPhoneLayout =
+    isVerySmallScreen || (isSmallScreen && isExtraSmallHeight);
 
-   return (
-       <Box sx={{
-           position: "fixed",
-           mt: -5,
-           display: "flex",
-           flexDirection: "column",
-           overflow: "hidden",
-           alignItems: "center",
-           justifyContent: "center",
-           minHeight: isSmallScreen ? "100%" : isIPadScreen ? "100%" : isIPadPro ? "100%" : "100%",
-           minWidth: isSmallScreen ? "100%" : isIPadScreen ? "100%" : isIPadPro ? "100%" : "100%",
-           boxSizing: "border-box",
-           backgroundImage: `url(${bgImage})`,
-           backgroundSize: "cover",
-           backgroundPosition: "center",
-           backgroundRepeat: "no-repeat",
-       }}>
-          
-           {/* Title */}
-           <Typography
-               variant={isSmallScreen ? "h3" : "h1"}
-               gutterBottom
-               sx={{
-                   position: "absolute",
-                   top: isSmallScreen ? "10%" : isIPadScreen ? "4.5%" : isIPadPro ? "7%" : 60,
-                   left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
-                   textAlign: "left",
-                   display: "inline-block",
-                   color: "white",
-                   fontFamily: '"Noto Sans", sans-serif',
-               }}
-           >
-               Scout
-               <Box
-                   component="span"
-                   sx={{
-                       backgroundImage: 'linear-gradient(to right, #FFA500, #FF4500)',
-                       backgroundClip: 'text',
-                       color: 'transparent',
-                       WebkitBackgroundClip: 'text',
-                       display: "inline-block",
-                       verticalAlign: "top",
-                       pl: 2,
-                       pt: .20,
-                   }}
-               >
-                   X
-               </Box>
-           </Typography>
-           <Typography
-               variant={isSmallScreen ? "h5" : "h3"}
-               sx={{
-                   position: "absolute",
-                   top: isSmallScreen ? 90 : isIPadScreen ? 160 : isIPadPro ? 160 : 180,
-                   left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
-                   textAlign: "left",
-                   display: "inline-block",
-                   color: "white",
-                   fontFamily: '"Noto Sans", sans-serif',
-               }}
-           >
-               Collection. Visualization. Analysis.
-           </Typography>
-           <Typography
-               variant={isSmallScreen ? "h6" : "h5"}
-               sx={{
-                   position: "absolute",
-                   top: isSmallScreen ? 120 : isIPadScreen ? 250 : isIPadPro ? 250 : 260,
-                   left: isSmallScreen ? 70 : isIPadScreen ? 65 : isIPadPro ? 105 : 205,
-                   textAlign: "left",
-                   display: "inline-block",
-                   color: "grey",
-                   fontFamily: '"Noto Sans", sans-serif',
-               }}
-           >
-               Developed by Iron Claw 972
-           </Typography>
+  // Force two rows on small vertical displays OR narrow screens
+  const isTwoRowLayout = isVerySmallScreen || isNarrowScreen;
 
+  // Force three rows on very narrow screens
+  const isThreeRowLayout = isVeryNarrowScreen;
 
+  return (
+    <Box
+      sx={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "auto",
+        alignItems: "flex-start",
+        justifyContent: "flex-start",
+        minHeight: "100vh",
+        minWidth: "100vw",
+        boxSizing: "border-box",
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundColor: "#1a1a1a",
+        pt: isPhoneLayout ? 6 : 12,
+        pl: isPhoneLayout ? 5 : 16,
+      }}
+    >
+      {/* Title */}
+      <Typography
+        variant={isPhoneLayout ? "h3" : isSmallScreen ? "h3" : "h1"}
+        gutterBottom
+        sx={{
+          textAlign: "left",
+          color: "white",
+          fontFamily: '"Noto Sans", sans-serif',
+          mb: isPhoneLayout ? 2 : 3,
+        }}
+      >
+        Scout
+        <Box
+          component="span"
+          sx={{
+            backgroundImage: "linear-gradient(to right, #FFA500, #FF4500)",
+            backgroundClip: "text",
+            color: "transparent",
+            WebkitBackgroundClip: "text",
+            display: "inline-block",
+            verticalAlign: "top",
+            pl: 1,
+          }}
+        >
+          X
+        </Box>
+      </Typography>
+      <Typography
+        variant={isPhoneLayout ? "h6" : isSmallScreen ? "h5" : "h3"}
+        sx={{
+          textAlign: "left",
+          color: "white",
+          fontFamily: '"Noto Sans", sans-serif',
+          mb: 1,
+        }}
+      >
+        Collection. Visualization. Analysis.
+      </Typography>
+      <Typography
+        variant={isPhoneLayout ? "body1" : isSmallScreen ? "h6" : "h5"}
+        sx={{
+          textAlign: "left",
+          color: "grey",
+          fontFamily: '"Noto Sans", sans-serif',
+          mb: isPhoneLayout ? 4 : 5,
+        }}
+      >
+        Developed by Iron Claw 972
+      </Typography>
 
+      {/* Main navigation buttons - Single row for normal displays */}
+      {!isTwoRowLayout && !isThreeRowLayout && (
+        <Stack
+          direction="row"
+          spacing={2}
+          flexWrap="wrap"
+          sx={{ width: "100%" }}
+        >
+          {renderScoutButton(
+            "/timer",
+            "Shoot Scout",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/fuelscout",
+            "Fuel Scout",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/videoscout",
+            "Video Scout",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/DataVisualizationDisplay",
+            "Data Analytics",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/assignments",
+            "Assignments",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/credits",
+            "Credits",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+          {renderScoutButton(
+            "/flappybird",
+            "FLAPPY BIRD",
+            isPhoneLayout,
+            isSmallScreen
+          )}
+        </Stack>
+      )}
 
-        <Stack direction="column" spacing={12}>        
-            <Stack direction="row" spacing={2} sx={{ position: "absolute",
-                    top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
-                    left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
-                   mt: 4 }}>
-               {renderScoutButton('/fuelscout', "Fuel Scout", isSmallScreen)}
-               {renderScoutButton('/timer', "Shoot Times Scout", isSmallScreen)}
-               {renderScoutButton('/videoscout', "Video Scout", isSmallScreen)}
-               {renderScoutButton('/DataVisualizationDisplay', "Data Analytics", isSmallScreen)}
-               {renderScoutButton('/assignments', "Assignments", isSmallScreen)}
-               {renderScoutButton('/credits', "Credits", isSmallScreen)}
-               {renderScoutButton('/flappybird', "FLAPPY BIRD")}
-            </Stack>
-            <Stack direction="row" spacing={2} sx={{ position: "absolute",
-                    top: isSmallScreen ? "42%" : isIPadPro ? 320 : isIPadPro ? 330 : 320,
-                    left: isSmallScreen ? 70 : isIPadScreen ? 60 : isIPadPro ? 100 : 200,
-                   mt: 4 }}>
-               <Button
-                   variant="contained"
-                   sx={{
-                       backgroundColor: "#665e5eff",
-                       color: "white",
-                       borderRadius: "8px",
-                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
-                       py: 2,
-                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
-                       fontWeight: "bold",
-                       textTransform: "none",
-                       "&:hover": { backgroundColor: "#4e5053ff" }
-                   }}
-                   onClick={async () => {
-                       try {
-                           const matchNumber = 43;
-                           const results = await calculateFuelScored(matchNumber);
-                           console.log("Fuel Scored Results:", results);
-                       } catch (error) {
-                           console.error("Error calculating fuel:", error);
-                       }
-                   }}
-               >
-                   Calculate Fuel
-               </Button>
-               <Button
-                   variant="contained"
-                   sx={{
-                       backgroundColor: "#665e5eff",
-                       color: "white",
-                       borderRadius: "8px",
-                       px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
-                       py: 2,
-                       fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
-                       fontWeight: "bold",
-                       textTransform: "none",
-                       "&:hover": { backgroundColor: "#4e5053ff" }
-                   }}
-                   onClick={async () => {
-                       try {
-                           updateMatchData();
-                           console.log("Successfully updated the match data.")
-                       } catch (error) {
-                           console.error("Error calculating fuel:", error);
-                       }
-                   }}
-               >
-                   Update Match Data
-               </Button>
-           </Stack>
-           </Stack>
-       </Box>
-   );
+      {/* Two rows for small vertical displays or narrow screens */}
+      {isTwoRowLayout && !isThreeRowLayout && (
+        <Stack direction="column" spacing={2} sx={{ width: "100%" }}>
+          {/* First row */}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            flexWrap="wrap"
+            sx={{ width: "100%" }}
+          >
+            {renderScoutButton(
+              "/fuelscout",
+              "Fuel Scout",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/timer",
+              "Shoot Times",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/videoscout",
+              "Video Scout",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/DataVisualizationDisplay",
+              "Data",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+          </Stack>
+
+          {/* Second row */}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            flexWrap="wrap"
+            sx={{ width: "100%" }}
+          >
+            {renderScoutButton(
+              "/assignments",
+              "Assignments",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/credits",
+              "Credits",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/flappybird",
+              "FLAPPY BIRD",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+          </Stack>
+        </Stack>
+      )}
+
+      {/* Three rows for very narrow screens */}
+      {isThreeRowLayout && (
+        <Stack direction="column" spacing={2} sx={{ width: "100%" }}>
+          {/* First row - 3 buttons */}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            flexWrap="wrap"
+            sx={{ width: "100%" }}
+          >
+            {renderScoutButton(
+              "/fuelscout",
+              "Fuel",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton("/timer", "Shoot", isPhoneLayout, isSmallScreen)}
+            {renderScoutButton(
+              "/videoscout",
+              "Video",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+          </Stack>
+
+          {/* Second row - 2 buttons */}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            flexWrap="wrap"
+            sx={{ width: "100%" }}
+          >
+            {renderScoutButton(
+              "/DataVisualizationDisplay",
+              "Data",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+            {renderScoutButton(
+              "/assignments",
+              "Assign",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+          </Stack>
+
+          {/* Third row - 1 button */}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            flexWrap="wrap"
+            sx={{ width: "100%" }}
+          >
+            {renderScoutButton(
+              "/credits",
+              "Credits",
+              isPhoneLayout,
+              isSmallScreen
+            )}
+          </Stack>
+        </Stack>
+      )}
+    </Box>
+  );
 }
 
-
 /* Renders an MUI Button instead of Grid */
-function renderScoutButton(path, label, isSmallScreen, isIPadScreen, isIPadPro) {
-   return (
-       <Button
-           variant="contained"
-           sx={{
-               backgroundColor: "#FF9800",
-               color: "white",
-               borderRadius: "8px",
-               px: isSmallScreen ? 2 : isIPadScreen ? 4 : isIPadPro ? 5 : 4,
-               py: 2,
-               fontSize: isSmallScreen ? "0.7rem" : isIPadScreen ? "1.1rem" : isIPadPro ? "4.0rem" : "1.1rem",
-               fontWeight: "bold",
-               textTransform: "none",
-               "&:hover": { backgroundColor: "#e65100" }
-           }}
-           onClick={() => { window.location.pathname = path; }}
-       >
-           {label}
-       </Button>
-   );
+function renderScoutButton(path, label, isPhoneLayout, isSmallScreen) {
+  return (
+    <Button
+      variant="contained"
+      sx={{
+        backgroundColor: "#FF9800",
+        color: "white",
+        borderRadius: isSmallScreen ? "4px" : "8px",
+        px: isSmallScreen ? 1.5 : 4,
+        py: isSmallScreen ? 1 : 2,
+        fontSize: isSmallScreen ? "0.55rem" : "1.1rem",
+        fontWeight: "bold",
+        textTransform: "none",
+        minWidth: isSmallScreen ? "70px" : "auto",
+        "&:hover": { backgroundColor: "#e65100" },
+      }}
+      onClick={() => {
+        window.location.pathname = path;
+      }}
+    >
+      {label}
+    </Button>
+  );
 }
