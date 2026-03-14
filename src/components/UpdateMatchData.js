@@ -53,6 +53,8 @@ export async function updateMatchData(matchNumber) {
           ballsPerSecond: r.ballsPerSec ?? r.ballsPerSecond ?? 0,
           shootingTime: r.shootingTime ?? 0,
           confidence: r.confidence ?? 0,
+          accuracy: r.accuracy ?? 0,
+          quality: r.quality ?? 0,
           autoClimb: r.autoClimb ?? 0,
           teleClimb: r.teleClimb ?? 0,
           quickFeedback: r.quickFeedback ?? [],

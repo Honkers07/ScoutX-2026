@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box, Stack, Typography, Button, useMediaQuery } from "@mui/material";
 import { Constants } from "../../Constants";
 import bgImage from "../../assets/backGround.png";
@@ -13,7 +13,17 @@ export default function Home() {
   const isVerySmallScreen = useMediaQuery("(max-width: 600px)");
   const isExtraSmallHeight = useMediaQuery("(max-height: 500px)");
   const isNarrowScreen = useMediaQuery("(max-width: 800px)");
-  const isVeryNarrowScreen = useMediaQuery("(max-width: 380px)");
+  const isVeryNarrowScreen = useMediaQuery("(max-width: 400px)");
+
+  const handleCalculateFuel = async () => {
+    try {
+      // Call calculateFuelScored with a sample match number (e.g., 1)
+      const result = await calculateFuelScored(43);
+      console.log("Fuel Calculation Result:", result);
+    } catch (error) {
+      console.error("Error calculating fuel:", error);
+    }
+  };
 
   // Determine if we're in a phone-like scenario (small width AND small height)
   const isPhoneLayout =
@@ -47,7 +57,7 @@ export default function Home() {
         backgroundRepeat: "no-repeat",
         backgroundColor: "#1a1a1a",
         pt: isPhoneLayout ? 6 : 12,
-        pl: isPhoneLayout ? 5 : 16,
+        pl: isPhoneLayout ? 8 : 20,
       }}
     >
       {/* Title */}
@@ -146,7 +156,7 @@ export default function Home() {
           )}
           {renderScoutButton(
             "/flappybird",
-            "FLAPPY BIRD",
+            "Flap Flap",
             isPhoneLayout,
             isSmallScreen
           )}
@@ -210,7 +220,7 @@ export default function Home() {
             )}
             {renderScoutButton(
               "/flappybird",
-              "FLAPPY BIRD",
+              "Flap Flap",
               isPhoneLayout,
               isSmallScreen
             )}
@@ -264,7 +274,7 @@ export default function Home() {
             )}
           </Stack>
 
-          {/* Third row - 1 button */}
+          {/* Third row - 2 buttons */}
           <Stack
             direction="row"
             spacing={1.5}
