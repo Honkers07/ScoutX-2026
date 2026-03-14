@@ -23,6 +23,9 @@ import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import firebase from "../../../firebase";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import WarningIcon from "@mui/icons-material/Warning";
+import ErrorIcon from "@mui/icons-material/Error";
 import TeamGraphs from "./TeamGraphs";
 
 const TeamMatches = () => {
@@ -38,6 +41,7 @@ const TeamMatches = () => {
   // Column fields for the new data structure
   const columns = [
     "matchNumber",
+    "dataQuality",
     "autoFuel",
     "teleFuel",
     "totalFuel",
@@ -46,7 +50,6 @@ const TeamMatches = () => {
     "autoClimb",
     "teleClimb",
     "totalClimb",
-    "dataQuality",
     "comments",
     "quickFeedback",
   ];
@@ -328,6 +331,14 @@ const TeamMatches = () => {
     return "green";
   };
 
+  // Get icon for data quality
+  const getDataQualityIcon = (quality) => {
+    if (quality < 0.5) return <ErrorIcon sx={{ color: "red", fontSize: 20 }} />;
+    if (quality < 0.75)
+      return <WarningIcon sx={{ color: "yellow", fontSize: 20 }} />;
+    return <CheckCircleIcon sx={{ color: "green", fontSize: 20 }} />;
+  };
+
   return (
     <>
       <TextField
@@ -468,7 +479,9 @@ const TeamMatches = () => {
                                   column === "dataQuality" ? "bold" : "normal",
                               }}
                             >
-                              {typeof match[column] === "number"
+                              {column === "dataQuality"
+                                ? getDataQualityIcon(match.quality)
+                                : typeof match[column] === "number"
                                 ? Number(match[column].toFixed(1))
                                 : match[column]}
                             </TableCell>
