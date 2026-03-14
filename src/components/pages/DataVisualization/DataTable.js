@@ -356,12 +356,18 @@
         canClimbDeep: false,
         canClimbShallow: false,
       
-        // Shooting Filters
-        canSOTM: false,
+        // Coral Filters
+        canScoreL4: false,
+        canScoreL2L3: false,
+        canScoreTrough: false,
+        hasGroundIntakeCoral: false,
+        hasStationIntake: false,
       
-        // Trench Filters
-        canGoOverBump: false,
-        canGoThroughTrench: false,
+        // Algae Filters
+        canScoreNet: false,
+        canScoreProcessor: false,
+        hasGroundIntakeAlgae: false,
+        canKnockAlgaeOff: false,
     });
     const [originalTeamData, setOriginalTeamData] = useState([]); // Stores all data before filtering
     

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button, ButtonGroup, Box, Typography, Divider, useMediaQuery } from '@mui/material';
+import Analytics from './Analytics';
 import DataTable from './DataTable';
 import TeamMatches from './TeamMatches';
 
@@ -14,6 +15,7 @@ const DataVisualizationDisplay = () => {
   const isSmallScreen = useMediaQuery("(max-width: 960px)");
 
   // Memoize components to prevent rerender on toggle
+  const analytics = useMemo(() => <Analytics />, []);
   const dataTable = useMemo(() => <DataTable />, []);
   const teamMatches = useMemo(() => <TeamMatches />, []);
 
@@ -48,6 +50,13 @@ const DataVisualizationDisplay = () => {
         >
           Team Data Visualization
         </Button>
+        <Button
+          onClick={() => handleSelection('AI Analysis')}
+          variant={selectedOption === 'AI Analysis' ? 'contained' : 'outlined'}
+          sx={{ flex: 1 }}
+        >
+          AI Analysis
+        </Button>
       </ButtonGroup>
 
       <Box mt={4} mb={7} sx={{ width: '100%' }}>
@@ -56,6 +65,9 @@ const DataVisualizationDisplay = () => {
         </Box>
         <Box sx={{ display: selectedOption === 'Team Data Visualization' ? 'block' : 'none' }}>
           {teamMatches}
+        </Box>
+        <Box sx={{ display: selectedOption === 'AI Analysis' ? 'block' : 'none' }}>
+          {analytics}
         </Box>
       </Box>
     </Box>
