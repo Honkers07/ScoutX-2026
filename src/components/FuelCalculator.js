@@ -762,6 +762,9 @@ async function runVideoMethodForAlliance({
       shootingTime,
       confidence: confidence[idx],
       method: "video",
+      autoClimb: typeof t.autoClimb === "number" ? t.autoClimb : 0,
+      teleClimb: typeof t.teleClimb === "number" ? t.teleClimb : 0,
+      quickFeedback: t.quickFeedback || [],
     };
   });
 }
@@ -910,6 +913,9 @@ export async function calculateFuelScored(matchNumber) {
         teamNumber,
         alliance,
         shootingTimesAdjustedCropped: cropped,
+        autoClimb: typeof doc.autoClimb === "number" ? doc.autoClimb : 0,
+        teleClimb: typeof doc.teleopClimb === "number" ? doc.teleopClimb : 0,
+        quickFeedback: doc.quickFeedback || [],
       };
       if (alliance === "red") redTeams.push(entry);
       else if (alliance === "blue") blueTeams.push(entry);
@@ -1065,6 +1071,9 @@ export async function calculateFuelScored(matchNumber) {
       shootingTime,
       confidence: -1,
       method: "basic",
+      autoClimb: typeof tDoc.autoClimb === "number" ? tDoc.autoClimb : 0,
+      teleClimb: typeof tDoc.teleopClimb === "number" ? tDoc.teleopClimb : 0,
+      quickFeedback: tDoc.quickFeedback || [],
     });
   }
 

@@ -1249,7 +1249,7 @@ function TimerContent({
                     mb: 0.5,
                   }}
                 >
-                  Auto Climb (first 15s)
+                  Auto Climb
                 </Typography>
                 <ToggleButtonGroup
                   value={autoClimb}
@@ -1272,8 +1272,6 @@ function TimerContent({
                 >
                   <ToggleButton value="No climb">None</ToggleButton>
                   <ToggleButton value="L1">L1</ToggleButton>
-                  <ToggleButton value="L2">L2</ToggleButton>
-                  <ToggleButton value="L3">L3</ToggleButton>
                 </ToggleButtonGroup>
               </Grid2>
               {/* Teleop Climb */}
@@ -1286,7 +1284,7 @@ function TimerContent({
                     mb: 0.5,
                   }}
                 >
-                  Teleop Climb (after 15s)
+                  Teleop Climb
                 </Typography>
                 <ToggleButtonGroup
                   value={teleopClimb}
@@ -1768,8 +1766,15 @@ export default function TimerPage() {
                         alliance,
                         comments,
                         quickFeedback,
-                        autoClimb,
-                        teleopClimb,
+                        autoClimb: autoClimb === "L1" ? 15 : 0,
+                        teleopClimb:
+                          teleopClimb === "L1"
+                            ? 10
+                            : teleopClimb === "L2"
+                            ? 20
+                            : teleopClimb === "L3"
+                            ? 30
+                            : 0,
                         shootingTimes: relativeShootingTimes,
                         timestamp: Date.now(),
                         totalShootingTime: relativeShootingTimes.reduce(
