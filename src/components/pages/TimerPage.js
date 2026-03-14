@@ -24,6 +24,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import Gambling from "./Gambling";
+import { syncAssignmentsWithSubmittedMatches } from "./Assignments/AssignmentHelpers";
 import bgImage from "../../assets/backGround.png";
 import firebase from "../../firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -1788,6 +1789,8 @@ export default function TimerPage() {
                     // Mark assignment as completed
                     if (name && matchNum) {
                       await data.markCurrentAssignmentCompleted(name, matchNum);
+                      // Sync with Firebase to verify submission
+                      await syncAssignmentsWithSubmittedMatches();
                     }
 
                     setAlert({

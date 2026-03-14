@@ -16,7 +16,7 @@ import {
   getAssignmentForScouter,
   getNextAssignment,
   markAssignmentComplete,
-} from "./pages/AssignmentHelpers";
+} from "./pages/Assignments/AssignmentHelpers";
 
 // Default scouter pool
 const DEFAULT_SCOUTERS = [
@@ -134,67 +134,21 @@ export default class MatchScoutData {
 
   // Get assignment for a scouter by name and match number
   getAssignmentForScouter(name, matchNumber) {
-    const savedAssignments = localStorage.getItem("matchAssignments");
-    if (!savedAssignments) return null;
-
-    const assignments = JSON.parse(savedAssignments);
-    const key = `match${matchNumber}`;
-    const matchAssignments = assignments[key];
-
-    if (!matchAssignments) return null;
-
-    // Find which slot this scouter is assigned to
-    for (const [slot, scouterName] of Object.entries(matchAssignments)) {
-      if (scouterName && scouterName.toLowerCase() === name.toLowerCase()) {
-        // Determine alliance and position
-        const isRed = slot.startsWith("red");
-        const position = isRed
-          ? parseInt(slot.replace("red", ""))
-          : parseInt(slot.replace("blue", ""));
-
-        // Get team number for this slot
-        const eventCode = localStorage.getItem("eventCode");
-        let teamNumber = "";
-
-        if (eventCode) {
-          // Try to get team number from saved matches
-          const savedMatches = localStorage.getItem("eventMatches");
-          if (savedMatches) {
-            const matches = JSON.parse(savedMatches);
-            const match = matches.find((m) => m.matchNumber === matchNumber);
-            if (match) {
-              teamNumber = isRed
-                ? match.red[position - 1]
-                : match.blue[position - 1];
-            }
-          }
-        }
-
-        return {
-          matchNumber,
-          alliance: isRed ? "Red" : "Blue",
-          position: position,
-          slot: slot,
-          team: teamNumber,
-        };
-      }
-    }
-
-    return null;
+    return getAssignmentForScouter(name, matchNumber);
   }
 
   // Auto-fill fields based on scouter assignment
   // Returns the assignment info if found, null otherwise
   autoFillFromAssignment(name, matchNumber) {
-    const assignment = this.getAssignmentForScouter(name, matchNumber);
+    const assignment = getAssignmentForScouter(name, matchNumber);
 
     if (assignment) {
       // Auto-fill the prematch data
       this.data[MatchStage.PRE_MATCH]["match"] =
-        assignment.matchNumber.toString();
+        assignment.match?.toString() || matchNumber.toString();
       this.data[MatchStage.PRE_MATCH]["alliance"] = assignment.alliance;
       this.data[MatchStage.PRE_MATCH]["start_position"] =
-        assignment.position.toString();
+        assignment.position?.toString() || "";
       this.data[MatchStage.PRE_MATCH]["verificationCode"] =
         assignment.verificationCode || "";
 
@@ -208,23 +162,6 @@ export default class MatchScoutData {
     return null;
   }
 
-  // Get all assignments for display
-  getAllAssignments() {
-    const savedAssignments = localStorage.getItem("matchAssignments");
-    return savedAssignments ? JSON.parse(savedAssignments) : {};
-  }
-
-  // Get current match number from saved state
-  getCurrentMatchNumber() {
-    return this.data[MatchStage.PRE_MATCH]["match"];
-  }
-
-  // Set match number and auto-fill from assignment
-  setMatchNumberAndAutoFill(name, matchNumber) {
-    this.data[MatchStage.PRE_MATCH]["match"] = matchNumber.toString();
-    return this.autoFillFromAssignment(name, matchNumber);
-  }
-
   // Get the next incomplete assignment for a scouter
   getNextAssignment(name) {
     return getNextAssignment(name);
@@ -236,10 +173,10 @@ export default class MatchScoutData {
 
     if (nextAssignment) {
       this.data[MatchStage.PRE_MATCH]["match"] =
-        nextAssignment.match.toString();
-      this.data[MatchStage.PRE_MATCH]["alliance"] = nextAssignment.alliance;
+        nextAssignment.match?.toString() || "";
+      this.data[MatchStage.PRE_MATCH]["alliance"] = nextAssignment.alliance || "";
       this.data[MatchStage.PRE_MATCH]["start_position"] =
-        nextAssignment.position.toString();
+        nextAssignment.position?.toString() || "";
       this.data[MatchStage.PRE_MATCH]["verificationCode"] =
         nextAssignment.verificationCode || "";
 

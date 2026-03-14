@@ -9,7 +9,7 @@ import MSPostmatch from "./matchscout/MSPostmatch";
 import MSTeleop from "./matchscout/MSTeleop";
 import CloseIcon from "@mui/icons-material/Close";
 import Gambling from "./Gambling";
-import { markAssignmentComplete, getNextAssignment } from "./AssignmentHelpers";
+import { markAssignmentComplete, syncAssignmentsWithSubmittedMatches } from "./Assignments/AssignmentHelpers";
 
 export default function MatchScout() {
     // Memoize the `data` object and pass in `setAlert`
@@ -114,6 +114,8 @@ export default function MatchScout() {
                                     // Mark assignment as complete
                                     if (scouterName && matchNumber) {
                                         await markAssignmentComplete(scouterName, parseInt(matchNumber));
+                                        // Also sync with Firebase to verify submission
+                                        await syncAssignmentsWithSubmittedMatches();
                                     }
                                     handleStageChange(stage + 2);
                                 }

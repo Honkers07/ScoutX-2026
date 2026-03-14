@@ -5,9 +5,7 @@ import Gambling from "./components/pages/Gambling";
 import DataVisualizationDisplay from "./components/pages/DataVisualization/DataVisualizationDisplay"
 import TimerPage from "./components/pages/TimerPage";
 import FuelScout from "./components/pages/FuelScout";
-import MatchAssignments from "./components/pages/MatchAssignments";
-import ScouterAssignments from "./components/pages/ScouterAssignments";
-import Assignments from "./components/pages/Assignments";
+import Assignments from "./components/pages/Assignments/Assignments";
 import FlappyBird3D from "./components/pages/FlappyBird";
 
 
@@ -44,16 +42,6 @@ export const Constants = {
             title: "Fuel Scout",
             path: "/fuelscout",
             component: FuelScout,
-        },
-        {
-            title: "Match Assignments",
-            path: "/match-assignments",
-            component: MatchAssignments,
-        },
-        {
-            title: "Scouter Assignments",
-            path: "/scouter-assignments",
-            component: ScouterAssignments,
         },
         {
             title: "Assignments",

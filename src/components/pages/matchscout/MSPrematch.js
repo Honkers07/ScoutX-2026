@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Box,
   TextField,
@@ -9,7 +9,7 @@ import {
   Paper,
   Alert,
 } from "@mui/material";
-import { getNextAssignment } from "../AssignmentHelpers";
+import { getNextAssignment } from "../Assignments/AssignmentHelpers";
 
 export default function MSPrematch({ data }) {
   const [scouterName, setScouterName] = useState(data.data[0]?.name || "");
@@ -20,22 +20,6 @@ export default function MSPrematch({ data }) {
   const [verificationCode, setVerificationCode] = useState(data.data[0]?.verificationCode || "");
   const [error, setError] = useState("");
 
-  // Update data when scouter name changes - try to autofill
-  useEffect(() => {
-    if (scouterName && data.isValidScouter(scouterName)) {
-      // Try to autofill from assignment
-      if (matchNumber) {
-        const assignment = data.autoFillFromAssignment(scouterName, parseInt(matchNumber));
-        if (assignment) {
-          setTeamNumber(data.data[0]?.team || "");
-          setAlliance(data.data[0]?.alliance || "");
-          setStartPosition(data.data[0]?.start_position || "");
-          setVerificationCode(data.data[0]?.verificationCode || "");
-        }
-      }
-    }
-  }, [scouterName, matchNumber]);
-
   const handleLoadNextAssignment = () => {
     if (!scouterName) {
       setError("Please enter your scouter name first");
@@ -44,7 +28,7 @@ export default function MSPrematch({ data }) {
 
     const nextAssignment = getNextAssignment(scouterName);
     if (nextAssignment) {
-      setMatchNumber(nextAssignment.match.toString());
+      setMatchNumber(nextAssignment.match?.toString() || "");
       setTeamNumber(nextAssignment.team?.toString() || "");
       setAlliance(nextAssignment.alliance || "");
       setStartPosition(nextAssignment.position?.toString() || "");
@@ -100,8 +84,7 @@ export default function MSPrematch({ data }) {
           required
         />
 
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <TextField
+        <TextField
             label="Match Number"
             value={matchNumber}
             onChange={(e) => {
@@ -119,7 +102,6 @@ export default function MSPrematch({ data }) {
           >
             Load Next
           </Button>
-        </Box>
 
         <TextField
           label="Team Number"
