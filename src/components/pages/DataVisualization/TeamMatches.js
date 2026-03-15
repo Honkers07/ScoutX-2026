@@ -23,9 +23,6 @@ import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import firebase from "../../../firebase";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import WarningIcon from "@mui/icons-material/Warning";
-import ErrorIcon from "@mui/icons-material/Error";
 import TeamGraphs from "./TeamGraphs";
 
 const TeamMatches = () => {
@@ -324,19 +321,34 @@ const TeamMatches = () => {
     return column.replace(/([a-z])([A-Z])/g, "$1 $2");
   };
 
-  // Get color for data quality
+  // Get color for data quality (muted colors)
   const getDataQualityColor = (quality) => {
-    if (quality < 0.5) return "red";
-    if (quality < 0.75) return "yellow";
-    return "green";
+    if (!quality || quality < 0.5) return "#c62828"; // Muted red
+    if (quality < 0.75) return "#f9a825"; // Muted yellow
+    return "#2e7d32"; // Dark green
   };
 
-  // Get icon for data quality
+  // Get icon for data quality - simple circle with muted colors
   const getDataQualityIcon = (quality) => {
-    if (quality < 0.5) return <ErrorIcon sx={{ color: "red", fontSize: 20 }} />;
-    if (quality < 0.75)
-      return <WarningIcon sx={{ color: "yellow", fontSize: 20 }} />;
-    return <CheckCircleIcon sx={{ color: "green", fontSize: 20 }} />;
+    let color;
+    if (!quality || quality < 0.5) {
+      color = "#c62828"; // Muted red
+    } else if (quality < 0.75) {
+      color = "#f9a825"; // Muted yellow
+    } else {
+      color = "#2e7d32"; // Dark green
+    }
+    return (
+      <Box
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          backgroundColor: color,
+          display: "inline-block",
+        }}
+      />
+    );
   };
 
   return (
@@ -473,14 +485,21 @@ const TeamMatches = () => {
                               sx={{
                                 color:
                                   column === "dataQuality"
-                                    ? getDataQualityColor(match.quality)
+                                    ? match.matchNumber ===
+                                        "Average (Last 5)" ||
+                                      match.matchNumber === "Average"
+                                      ? "white"
+                                      : getDataQualityColor(match.dataQuality)
                                     : "white",
                                 fontWeight:
-                                  column === "dataQuality" ? "bold" : "normal",
+                                  column === "normal",
                               }}
                             >
                               {column === "dataQuality"
-                                ? getDataQualityIcon(match.quality)
+                                ? match.matchNumber === "Average (Last 5)" ||
+                                  match.matchNumber === "Average"
+                                  ? "N/A"
+                                  : getDataQualityIcon(match.dataQuality)
                                 : typeof match[column] === "number"
                                 ? Number(match[column].toFixed(1))
                                 : match[column]}
