@@ -6,6 +6,8 @@ import {
   LinearProgress,
   Alert,
   AlertTitle,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import { useState, useRef, useEffect, useCallback } from "react";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -44,6 +46,7 @@ export default function VSAllianceTab(props) {
   const [processingStatus, setProcessingStatus] = useState("");
   const [progress, setProgress] = useState(0); // 0-100 for progress bar
   const [error, setError] = useState(null);
+  const [isTwoTimeSpeed, setIsTwoTimeSpeed] = useState(false);
   const videoRef = useRef(null);
   const timeoutIdsRef = useRef([]);
 
@@ -247,7 +250,14 @@ export default function VSAllianceTab(props) {
       );
       setProgress(100);
 
-      setScoreTimeline(result.scoreTimeline);
+      setScoreTimeline(
+        isTwoTimeSpeed
+          ? result.scoreTimeline.map((e) => ({
+              ...e,
+              timestamp: e.timestamp * 2,
+            }))
+          : result.scoreTimeline
+      );
       setTotalScore(result.totalScore);
       handleSetStage(AllianceStage.COMPLETE);
     } catch (err) {
@@ -280,6 +290,21 @@ export default function VSAllianceTab(props) {
       <Typography variant="h6" sx={{ mb: 2, color: allianceColor }}>
         Upload {allianceLabel} Scoreboard Video
       </Typography>
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={isTwoTimeSpeed}
+            onChange={(e) => setIsTwoTimeSpeed(e.target.checked)}
+          />
+        }
+        label={
+          <Typography variant="body2" color="text.secondary">
+            Video is 2x speed
+          </Typography>
+        }
+        sx={{ mb: 2 }}
+      />
 
       <Box
         sx={{
