@@ -36,18 +36,24 @@ def check_cuda_available():
         print(f"[OCR] Error checking CUDA: {e}")
         return False
 
-def get_reader():
-    """Get or create the EasyOCR reader instance with GPU support."""
+def get_reader(fast=True):
+    """Get or create the EasyOCR reader instance with GPU support.
+    
+    Args:
+        fast: If True, use faster model (less accurate but faster)
+    """
     global _reader, _gpu_enabled
     
     if _reader is None:
         # First check CUDA availability
         _gpu_enabled = check_cuda_available()
         
-        print(f"[OCR] Loading EasyOCR model with GPU={_gpu_enabled}...")
+        print(f"[OCR] Loading EasyOCR model with GPU={_gpu_enabled}, fast={fast}...")
         # English only, GPU=True if available, verbose=False
         # Note: EasyOCR will fall back to CPU automatically if GPU not available
-        _reader = easyocr.Reader(['en'], gpu=_gpu_enabled, verbose=False)
+        # Using download=False to avoid re-downloading model
+        _reader = easyocr.Reader(['en'], gpu=_gpu_enabled, verbose=False, 
+                                  download_enabled=False)
         print("[OCR] EasyOCR model loaded successfully")
         
         # Verify GPU is actually being used
@@ -57,6 +63,66 @@ def get_reader():
             print("[OCR] Running on CPU (GPU not available)")
     
     return _reader
+
+
+def extract_score_batch(images, batch_size=20):
+    """
+    Extract scores from multiple images using chunked batch processing.
+    This avoids CUDA out of memory errors by processing in smaller batches.
+    
+    Args:
+        images: List of input images (numpy arrays from OpenCV)
+        batch_size: Number of images to process at once (default: 10)
+        
+    Returns:
+        List of integer scores (None for frames where no score was found)
+    """
+    if not images:
+        return []
+    
+    try:
+        import torch  # For memory management
+        reader = get_reader()
+        
+        all_scores = []
+        total_images = len(images)
+        
+        # Process in chunks to avoid memory issues
+        for i in range(0, total_images, batch_size):
+            chunk = images[i:i + batch_size]
+            
+            # Use batch processing for this chunk
+            results = reader.readtext_batched(chunk)
+            
+            for result in results:
+                if not result:
+                    all_scores.append(None)
+                    continue
+                
+                # Find the best numeric result
+                best_score = None
+                best_confidence = 0
+                
+                for bbox, text, confidence in result:
+                    cleaned = ''.join(filter(str.isdigit, text))
+                    
+                    if cleaned and confidence > 0.3:
+                        score = int(cleaned)
+                        if 0 <= score <= 999 and confidence > best_confidence:
+                            best_score = score
+                            best_confidence = confidence
+                
+                all_scores.append(best_score)
+            
+            # Clear GPU cache after each batch to prevent memory fragmentation
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        return all_scores
+        
+    except Exception as e:
+        print(f"[OCR] Error extracting batch scores: {e}")
+        return [None] * len(images)
 
 
 def extract_score(image):

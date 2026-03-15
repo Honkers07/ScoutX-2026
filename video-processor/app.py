@@ -124,15 +124,12 @@ def process_video():
             print("[API] Step 2: Cropping frames and running OCR...")
             print(f"[API]     Crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
             
-            scores = []
-            ocr_results = []
-            total = len(frames)
+            # Step 2a: Preprocess all frames first
+            print("[API] Step 2a: Preprocessing frames...")
+            cropped_frames = []
+            timestamps = []
             
             for i, (timestamp, frame) in enumerate(frames):
-                # Log every 50 frames
-                if i % 50 == 0:
-                    print(f"[API]     Frame {i+1}/{total} ({(i/total*100):.0f}%)")
-                
                 # Crop
                 h, w = frame.shape[:2]
                 x1 = max(0, min(crop_x, w - 1))
@@ -144,10 +141,35 @@ def process_video():
                 if cropped.size == 0:
                     continue
                 
-                # Preprocess and OCR
+                # Preprocess
                 processed = preprocess_for_ocr(cropped)
-                score = extract_score(processed)
-                
+                cropped_frames.append(processed)
+                timestamps.append(timestamp)
+            
+            print(f"[API] ✓ Preprocessed {len(cropped_frames)} frames")
+            
+            # Step 2b: Batch OCR processing (much faster!)
+            print("[API] Step 2b: Running batch OCR...")
+            from processors.ocr_processor import extract_score_batch
+            
+            try:
+                batch_scores = extract_score_batch(cropped_frames)
+            except Exception as e:
+                print(f"[API] Batch OCR failed, falling back to single-frame: {e}")
+                # Fall back to single-frame processing
+                batch_scores = []
+                for processed in cropped_frames:
+                    try:
+                        score = extract_score(processed)
+                        batch_scores.append(score)
+                    except:
+                        batch_scores.append(None)
+            
+            scores = []
+            ocr_results = []
+            total = len(cropped_frames)
+            
+            for i, (timestamp, score) in enumerate(zip(timestamps, batch_scores)):
                 ocr_results.append({'frame': i, 'timestamp': round(timestamp, 3), 'score': score})
                 
                 if score is not None:
@@ -240,20 +262,14 @@ def process_video_stream():
                 print(f"[API] ✓ Extracted {len(frames)} frames")
                 yield json.dumps({'status': 'extracted', 'frames': len(frames), 'message': f'Extracted {len(frames)} frames'}) + '\n\n'
                 
-                # Step 2: Crop and OCR
-                print("[API] Step 2: Cropping frames and running OCR...")
-                yield json.dumps({'status': 'processing', 'message': 'Processing frames with OCR...'}) + '\n\n'
+                # Step 2a: Preprocess all frames
+                print("[API] Step 2a: Preprocessing frames...")
+                yield json.dumps({'status': 'preprocessing', 'message': 'Preprocessing frames...'}) + '\n\n'
                 
-                scores = []
-                ocr_results = []
-                total = len(frames)
+                cropped_frames = []
+                timestamps = []
                 
                 for i, (timestamp, frame) in enumerate(frames):
-                    # Send progress update every 5 frames
-                    if i % 5 == 0:
-                        progress = int((i / total) * 100)
-                        yield json.dumps({'status': 'processing', 'progress': progress, 'frame': i, 'total': total, 'message': f'Processing frame {i+1}/{total}'}) + '\n\n'
-                    
                     # Crop
                     h, w = frame.shape[:2]
                     x1 = max(0, min(crop_x, w - 1))
@@ -265,12 +281,37 @@ def process_video_stream():
                     if cropped.size == 0:
                         continue
                     
-                    # Preprocess and OCR
+                    # Preprocess
                     processed = preprocess_for_ocr(cropped)
-                    score = extract_score(processed)
-                    
-                    ocr_results.append({'frame': i, 'timestamp': round(timestamp, 3), 'score': score})
-                    
+                    cropped_frames.append(processed)
+                    timestamps.append(timestamp)
+                
+                print(f"[API] ✓ Preprocessed {len(cropped_frames)} frames")
+                yield json.dumps({'status': 'preprocessed', 'frames': len(cropped_frames), 'message': f'Preprocessed {len(cropped_frames)} frames'}) + '\n\n'
+                
+                # Step 2b: Batch OCR processing
+                print("[API] Step 2b: Running batch OCR...")
+                yield json.dumps({'status': 'processing', 'message': 'Running batch OCR...'}) + '\n\n'
+                
+                from processors.ocr_processor import extract_score_batch
+                
+                try:
+                    batch_scores = extract_score_batch(cropped_frames)
+                except Exception as e:
+                    print(f"[API] Batch OCR failed, falling back: {e}")
+                    # Fall back to single-frame
+                    batch_scores = []
+                    for processed in cropped_frames:
+                        try:
+                            score = extract_score(processed)
+                            batch_scores.append(score)
+                        except:
+                            batch_scores.append(None)
+                
+                scores = []
+                total = len(cropped_frames)
+                
+                for i, (timestamp, score) in enumerate(zip(timestamps, batch_scores)):
                     if score is not None:
                         scores.append((timestamp, score))
                 

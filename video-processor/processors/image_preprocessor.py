@@ -35,7 +35,7 @@ def preprocess_for_ocr(image):
     blurred = cv2.GaussianBlur(inverted, (3, 3), 0)
     
     # Scale up for better OCR accuracy (digits become more distinct)
-    scale_factor = 3  # Increased from 2 to 3 for larger digits
+    scale_factor = 2  # Reduced from 3 to 2 for faster processing (9x smaller images)
     scaled = cv2.resize(
         blurred, 
         None, 
