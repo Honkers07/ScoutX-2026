@@ -1,23 +1,61 @@
 """
 OCR processor module - extracts text/numbers from images using EasyOCR.
 EasyOCR doesn't require Tesseract installation - uses deep learning.
+
+GPU/CUDA Setup:
+- EasyOCR will automatically use GPU if available
+- For CUDA 11.x: pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 -f https://download.pytorch.org/whl/cu117
+- For CUDA 12.x: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+- Verify with: python -c "import torch; print(torch.cuda.is_available())"
 """
 
 import easyocr
 import re
+import os
 
 # Initialize EasyOCR reader (loads model on first use)
 # GPU is automatically used if available
 _reader = None
+_gpu_enabled = None
+
+def check_cuda_available():
+    """Check if CUDA/GPU is available through torch."""
+    try:
+        import torch
+        cuda_available = torch.cuda.is_available()
+        if cuda_available:
+            print(f"[OCR] CUDA is available! GPU: {torch.cuda.get_device_name(0)}")
+            print(f"[OCR] CUDA version: {torch.version.cuda}")
+        else:
+            print("[OCR] CUDA not available - will use CPU")
+        return cuda_available
+    except ImportError:
+        print("[OCR] PyTorch not installed - will use CPU")
+        return False
+    except Exception as e:
+        print(f"[OCR] Error checking CUDA: {e}")
+        return False
 
 def get_reader():
-    """Get or create the EasyOCR reader instance."""
-    global _reader
+    """Get or create the EasyOCR reader instance with GPU support."""
+    global _reader, _gpu_enabled
+    
     if _reader is None:
-        print("[OCR] Loading EasyOCR model (first run may take a minute)...")
+        # First check CUDA availability
+        _gpu_enabled = check_cuda_available()
+        
+        print(f"[OCR] Loading EasyOCR model with GPU={_gpu_enabled}...")
         # English only, GPU=True if available, verbose=False
-        _reader = easyocr.Reader(['en'], gpu=True, verbose=False)
+        # Note: EasyOCR will fall back to CPU automatically if GPU not available
+        _reader = easyocr.Reader(['en'], gpu=_gpu_enabled, verbose=False)
         print("[OCR] EasyOCR model loaded successfully")
+        
+        # Verify GPU is actually being used
+        if _gpu_enabled:
+            print("[OCR] GPU acceleration is ENABLED for OCR")
+        else:
+            print("[OCR] Running on CPU (GPU not available)")
+    
     return _reader
 
 
