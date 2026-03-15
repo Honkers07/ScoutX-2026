@@ -39,14 +39,14 @@ const TeamMatches = () => {
   const columns = [
     "matchNumber",
     "dataQuality",
+    "totalFuel",
     "autoFuel",
     "teleFuel",
-    "totalFuel",
     "ballsPerSecond",
     "shootingTime",
+    "totalClimb",
     "autoClimb",
     "teleClimb",
-    "totalClimb",
     "comments",
     "quickFeedback",
   ];
@@ -491,8 +491,7 @@ const TeamMatches = () => {
                                       ? "white"
                                       : getDataQualityColor(match.dataQuality)
                                     : "white",
-                                fontWeight:
-                                  column === "normal",
+                                fontWeight: column === "normal",
                               }}
                             >
                               {column === "dataQuality"

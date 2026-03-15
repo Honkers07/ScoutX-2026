@@ -20,7 +20,7 @@ import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
 
 const DataTable = () => {
   const [teamData, setTeamData] = useState([]);
-  const [sortBy, setSortBy] = useState("Average Auto Fuel"); // Default sort column
+  const [sortBy, setSortBy] = useState("Average Total Fuel"); // Default sort column
   const [sortDirection, setSortDirection] = useState("asc"); // Default sort direction
   const [deletedRows, setDeletedRows] = useState([]); // Track deleted rows
   const [restoreMatch, setRestoreMatch] = useState(""); // Track match to restore
@@ -46,10 +46,9 @@ const DataTable = () => {
         if (teamData) {
           acc.autoFuel += teamData.autoFuel || 0;
           acc.teleFuel += teamData.teleFuel || 0;
+          acc.totalFuel += (teamData.autoFuel || 0) + (teamData.teleFuel || 0);
           acc.ballsPerSecond += teamData.ballsPerSecond || 0;
           acc.shootingTime += teamData.shootingTime || 0;
-          acc.totalClimb +=
-            (teamData.autoClimb || 0) + (teamData.teleClimb || 0);
           acc.matchCount++;
         }
 
@@ -58,9 +57,9 @@ const DataTable = () => {
       {
         autoFuel: 0,
         teleFuel: 0,
+        totalFuel: 0,
         ballsPerSecond: 0,
         shootingTime: 0,
-        totalClimb: 0,
         matchCount: 0,
       }
     );
@@ -69,23 +68,21 @@ const DataTable = () => {
 
     if (matchCount === 0) {
       return {
+        "Average Total Fuel": 0,
         "Average Auto Fuel": 0,
-        "Average Tele Fuel": 0,
         "Average Balls Per Second": 0,
         "Average Shooting Time": 0,
-        "Average Total Climb": 0,
       };
     }
 
     return {
+      "Average Total Fuel":
+        Math.round((totals.totalFuel / matchCount) * 10) / 10,
       "Average Auto Fuel": Math.round((totals.autoFuel / matchCount) * 10) / 10,
-      "Average Tele Fuel": Math.round((totals.teleFuel / matchCount) * 10) / 10,
       "Average Balls Per Second":
         Math.round((totals.ballsPerSecond / matchCount) * 100) / 100,
       "Average Shooting Time":
         Math.round((totals.shootingTime / matchCount) * 10) / 10,
-      "Average Total Climb":
-        Math.round((totals.totalClimb / matchCount) * 10) / 10,
     };
   };
 
@@ -169,11 +166,10 @@ const DataTable = () => {
   });
 
   const columns = [
+    "Average Total Fuel",
     "Average Auto Fuel",
-    "Average Tele Fuel",
     "Average Balls Per Second",
     "Average Shooting Time",
-    "Average Total Climb",
   ];
 
   return (
@@ -243,19 +239,16 @@ const DataTable = () => {
               </TableCell>
               <TableCell sx={{ color: "#f57c00" }}>{team.teamNumber}</TableCell>
               <TableCell sx={{ color: "white" }}>
-                {Number(team["Average Auto Fuel"].toFixed(1))}
+                {Number(team["Average Total Fuel"].toFixed(1))}
               </TableCell>
               <TableCell sx={{ color: "white" }}>
-                {Number(team["Average Tele Fuel"].toFixed(1))}
+                {Number(team["Average Auto Fuel"].toFixed(1))}
               </TableCell>
               <TableCell sx={{ color: "white" }}>
                 {Number(team["Average Balls Per Second"].toFixed(1))}
               </TableCell>
               <TableCell sx={{ color: "white" }}>
                 {Number(team["Average Shooting Time"].toFixed(1))}
-              </TableCell>
-              <TableCell sx={{ color: "white" }}>
-                {Number(team["Average Total Climb"].toFixed(1))}
               </TableCell>
             </TableRow>
           ))}
