@@ -17,16 +17,27 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EventIcon from "@mui/icons-material/Event";
 import ShiftPanel from "./ShiftPanel";
 import ScouterList from "./ScouterList";
+import ScouterSelectionModal from "./ScouterSelectionModal";
 import {
   getScouterList,
   getShifts,
   getMatches,
   getEventCode,
+  getAllAssignments,
   generateShifts,
   regenerateAssignmentsFromShifts,
   updateShiftScouter,
   importMatchesFromTBA,
   saveShifts,
+  saveShiftsBoth,
+  saveAssignmentsBoth,
+  saveMatchesBoth,
+  subscribeToShifts,
+  subscribeToAssignments,
+  subscribeToMatches,
+  cleanupAllListeners,
+  loadShiftsFromFirestore,
+  loadAssignmentsFromFirestore,
 } from "./AssignmentHelpers";
 import { ADMIN_PASSWORD } from "./AssignmentConstants";
 
@@ -40,25 +51,66 @@ export default function AdminAssignmentsTab() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editingEnabled, setEditingEnabled] = useState(false);
+  const [selectionModalOpen, setSelectionModalOpen] = useState(false);
+  const [selectedScoutersForShift, setSelectedScoutersForShift] = useState([]);
 
-  // Load initial data
+  // Handle opening selection modal with all scouters pre-selected
+  const handleOpenSelectionModal = () => {
+    // Ensure we have scouters loaded
+    const scouts = scouterList.length > 0 ? scouterList : getScouterList();
+    setScouterList(scouts); // Update state if needed
+    setSelectedScoutersForShift([...scouts]);
+    setSelectionModalOpen(true);
+  };
+
+  // Load initial data from Firestore and set up real-time listeners
   useEffect(() => {
-    const loadData = () => {
-      const loadedMatches = getMatches();
-      setMatches(loadedMatches);
+    const loadData = async () => {
+      // First load from localStorage (fast)
+      const localMatches = getMatches();
+      setMatches(localMatches);
 
-      const loadedScouters = getScouterList();
-      setScouterList(loadedScouters);
+      const localScouters = getScouterList();
+      setScouterList(localScouters);
 
-      const loadedShifts = getShifts();
-      setShifts(loadedShifts);
+      const localShifts = getShifts();
+      setShifts(localShifts);
+
+      // Then try to load from Firestore (authoritative)
+      try {
+        const [firestoreShifts, firestoreAssignments] = await Promise.all([
+          loadShiftsFromFirestore(),
+          loadAssignmentsFromFirestore(),
+        ]);
+        
+        if (firestoreShifts && firestoreShifts.length > 0) {
+          setShifts(firestoreShifts);
+        }
+      } catch (error) {
+        console.error("Error loading from Firestore:", error);
+      }
     };
 
     loadData();
 
-    // Listen for storage changes
+    // Set up real-time listeners
+    const unsubscribeShifts = subscribeToShifts((updatedShifts) => {
+      setShifts(updatedShifts);
+    });
+
+    const unsubscribeAssignments = subscribeToAssignments(() => {
+      // Trigger storage event for other components
+      window.dispatchEvent(new Event("assignmentsUpdated"));
+    });
+
+    // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = () => {
-      loadData();
+      const loadedMatches = getMatches();
+      setMatches(loadedMatches);
+      const loadedScouters = getScouterList();
+      setScouterList(loadedScouters);
+      const loadedShifts = getShifts();
+      setShifts(loadedShifts);
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -67,6 +119,8 @@ export default function AdminAssignmentsTab() {
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("assignmentsUpdated", handleStorageChange);
+      if (unsubscribeShifts) unsubscribeShifts();
+      if (unsubscribeAssignments) unsubscribeAssignments();
     };
   }, []);
 
@@ -89,6 +143,10 @@ export default function AdminAssignmentsTab() {
     try {
       const importedMatches = await importMatchesFromTBA(eventCode, tbaApiKey);
       setMatches(importedMatches);
+      
+      // Save to both localStorage and Firestore
+      await saveMatchesBoth(importedMatches, eventCode);
+      
       setSuccess(`Successfully imported ${importedMatches.length} matches`);
     } catch (err) {
       setError(`Failed to import matches: ${err.message}`);
@@ -98,36 +156,65 @@ export default function AdminAssignmentsTab() {
   };
 
   // Handle auto-generate shifts
-  const handleGenerateShifts = () => {
+  const handleGenerateShifts = async (scoutersToUse = null) => {
+    const scouts = scoutersToUse || scouterList;
+    
     if (matches.length === 0) {
       setError("Please import matches first");
       return;
     }
 
-    if (scouterList.length === 0) {
+    if (scouts.length === 0) {
       setError("No scouters available");
       return;
     }
 
     setError("");
-    const generatedShifts = generateShifts(scouterList, matches.length);
-    setShifts(generatedShifts);
-    saveShifts(generatedShifts);
-    regenerateAssignmentsFromShifts();
-    setSuccess(`Generated ${generatedShifts.length} shifts`);
+    setLoading(true);
+    
+    try {
+      const generatedShifts = generateShifts(scouts, matches.length);
+      setShifts(generatedShifts);
+      
+      // Save to both localStorage and Firestore
+      await saveShiftsBoth(generatedShifts);
+      
+      // Regenerate assignments
+      regenerateAssignmentsFromShifts();
+      
+      // Also save assignments to Firestore
+      const assignments = getAllAssignments();
+      await saveAssignmentsBoth(assignments);
+      
+      setSuccess(`Generated ${generatedShifts.length} shifts with ${scouts.length} scouters`);
+    } catch (error) {
+      console.error("Error generating shifts:", error);
+      setError("Failed to save shifts to Firebase");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Handle shift scouter update
-  const handleUpdateShiftScouter = (shiftIndex, positionIndex, newName) => {
-    updateShiftScouter(shiftIndex, positionIndex, newName);
+  const handleUpdateShiftScouter = async (shiftIndex, positionIndex, newName) => {
+    await updateShiftScouter(shiftIndex, positionIndex, newName);
     // Reload shifts after update
     const updatedShifts = getShifts();
     setShifts(updatedShifts);
   };
 
   // Handle save changes
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     regenerateAssignmentsFromShifts();
+    
+    // Save to Firestore
+    try {
+      const assignments = getAllAssignments();
+      await saveAssignmentsBoth(assignments);
+    } catch (error) {
+      console.error("Error saving to Firestore:", error);
+    }
+    
     setSuccess("Shift changes saved! Assignments have been regenerated.");
   };
 
@@ -213,7 +300,7 @@ export default function AdminAssignmentsTab() {
             variant="contained"
             color="secondary"
             startIcon={<AutoAwesomeIcon />}
-            onClick={handleGenerateShifts}
+            onClick={handleOpenSelectionModal}
             disabled={matches.length === 0}
           >
             Auto Generate (Shift-Based)
@@ -305,6 +392,19 @@ export default function AdminAssignmentsTab() {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Scouter Selection Modal */}
+      <ScouterSelectionModal
+        open={selectionModalOpen}
+        onClose={() => setSelectionModalOpen(false)}
+        availableScouters={scouterList}
+        selectedScouters={selectedScoutersForShift}
+        matchCount={matches.length}
+        onConfirm={(selected) => {
+          setSelectedScoutersForShift(selected);
+          handleGenerateShifts(selected);
+        }}
+      />
     </Box>
   );
 }

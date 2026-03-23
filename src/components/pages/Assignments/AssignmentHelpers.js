@@ -1,6 +1,6 @@
 import { DEFAULT_SCOUTERS, STORAGE_KEYS, COLLECTIONS, DEFAULT_SHIFT_SIZE } from "./AssignmentConstants";
 import firebase from "../../../firebase";
-import { doc, setDoc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, query, where, onSnapshot, writeBatch } from "firebase/firestore";
 
 /**
  * Get the default scouter pool
@@ -294,7 +294,7 @@ export function markAssignmentComplete(name, matchNumber) {
 /**
  * Update a scouter in a shift
  */
-export function updateShiftScouter(shiftIndex, positionIndex, newName) {
+export async function updateShiftScouter(shiftIndex, positionIndex, newName) {
   const shifts = getShifts();
   
   if (!shifts[shiftIndex]) {
@@ -310,10 +310,15 @@ export function updateShiftScouter(shiftIndex, positionIndex, newName) {
   // Update scouter names array
   shifts[shiftIndex].scouterNames = shifts[shiftIndex].scouterPositions.map((s) => s.name);
   
-  saveShifts(shifts);
+  // Save to both localStorage and Firestore
+  await saveShiftsBoth(shifts);
   
   // Regenerate assignments with new shift configuration
   regenerateAssignmentsFromShifts();
+  
+  // Save assignments to Firestore
+  const assignments = getAllAssignments();
+  await saveAssignmentsBoth(assignments);
 }
 
 /**
@@ -588,5 +593,191 @@ export async function checkMatchSubmitted(teamNumber, matchNumber) {
   } catch (error) {
     console.error("Error checking match submission:", error);
     return false;
+  }
+}
+
+// Real-time listener references for cleanup
+let shiftsUnsubscribe = null;
+let assignmentsUnsubscribe = null;
+let matchesUnsubscribe = null;
+
+/**
+ * Set up real-time listener for shifts from Firestore
+ * Returns unsubscribe function
+ */
+export function subscribeToShifts(onUpdate) {
+  try {
+    const collectionRef = collection(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS);
+    
+    // Unsubscribe from previous listener if exists
+    if (shiftsUnsubscribe) {
+      shiftsUnsubscribe();
+    }
+    
+    shiftsUnsubscribe = onSnapshot(collectionRef, (snapshot) => {
+      const shifts = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        shifts.push({
+          id: data.shiftId,
+          startMatch: data.matchStart,
+          endMatch: data.matchEnd,
+          scouterNames: data.scouterNames,
+          scouterPositions: data.scouterPositions,
+          matchCount: data.matchEnd - data.matchStart + 1,
+        });
+      });
+      
+      shifts.sort((a, b) => a.id - b.id);
+      saveShifts(shifts);
+      onUpdate(shifts);
+    }, (error) => {
+      console.error("Error listening to shifts:", error);
+    });
+    
+    return shiftsUnsubscribe;
+  } catch (error) {
+    console.error("Error setting up shifts listener:", error);
+    return null;
+  }
+}
+
+/**
+ * Set up real-time listener for assignments from Firestore
+ * Returns unsubscribe function
+ */
+export function subscribeToAssignments(onUpdate) {
+  try {
+    const collectionRef = collection(firebase, COLLECTIONS.ASSIGNMENTS);
+    
+    // Unsubscribe from previous listener if exists
+    if (assignmentsUnsubscribe) {
+      assignmentsUnsubscribe();
+    }
+    
+    assignmentsUnsubscribe = onSnapshot(collectionRef, (snapshot) => {
+      const assignments = {};
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        assignments[data.name] = data.assignments;
+      });
+      
+      saveAssignments(assignments);
+      onUpdate(assignments);
+    }, (error) => {
+      console.error("Error listening to assignments:", error);
+    });
+    
+    return assignmentsUnsubscribe;
+  } catch (error) {
+    console.error("Error setting up assignments listener:", error);
+    return null;
+  }
+}
+
+/**
+ * Set up real-time listener for matches from Firestore
+ * Returns unsubscribe function
+ */
+export function subscribeToMatches(onUpdate) {
+  try {
+    const collectionRef = collection(firebase, COLLECTIONS.MATCHES);
+    
+    // Unsubscribe from previous listener if exists
+    if (matchesUnsubscribe) {
+      matchesUnsubscribe();
+    }
+    
+    matchesUnsubscribe = onSnapshot(collectionRef, (snapshot) => {
+      const matches = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        matches.push({
+          matchNumber: data.matchNumber,
+          redTeams: data.redTeams,
+          blueTeams: data.blueTeams,
+        });
+      });
+      
+      matches.sort((a, b) => a.matchNumber - b.matchNumber);
+      saveMatches(matches);
+      onUpdate(matches);
+    }, (error) => {
+      console.error("Error listening to matches:", error);
+    });
+    
+    return matchesUnsubscribe;
+  } catch (error) {
+    console.error("Error setting up matches listener:", error);
+    return null;
+  }
+}
+
+/**
+ * Clean up all real-time listeners
+ */
+export function cleanupAllListeners() {
+  if (shiftsUnsubscribe) {
+    shiftsUnsubscribe();
+    shiftsUnsubscribe = null;
+  }
+  if (assignmentsUnsubscribe) {
+    assignmentsUnsubscribe();
+    assignmentsUnsubscribe = null;
+  }
+  if (matchesUnsubscribe) {
+    matchesUnsubscribe();
+    matchesUnsubscribe = null;
+  }
+}
+
+/**
+ * Save shifts to both localStorage and Firestore
+ */
+export async function saveShiftsBoth(shifts) {
+  // Save to localStorage
+  saveShifts(shifts);
+  
+  // Save to Firestore
+  try {
+    await saveShiftsToFirestore(shifts);
+  } catch (error) {
+    console.error("Error saving shifts to Firestore:", error);
+  }
+}
+
+/**
+ * Save assignments to both localStorage and Firestore
+ */
+export async function saveAssignmentsBoth(assignments) {
+  // Save to localStorage
+  saveAssignments(assignments);
+  
+  // Save to Firestore
+  try {
+    await saveAssignmentsToFirestore(assignments);
+  } catch (error) {
+    console.error("Error saving assignments to Firestore:", error);
+  }
+}
+
+/**
+ * Save matches to both localStorage and Firestore
+ */
+export async function saveMatchesBoth(matches, eventCode) {
+  // Save to localStorage
+  saveMatches(matches);
+  saveEventCode(eventCode);
+  
+  // Save to Firestore
+  try {
+    const docRef = doc(firebase, COLLECTIONS.MATCHES, "schedule");
+    await setDoc(docRef, {
+      eventCode,
+      matches,
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error saving matches to Firestore:", error);
   }
 }

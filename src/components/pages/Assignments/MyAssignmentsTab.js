@@ -25,7 +25,13 @@ import {
   getScouterList,
   getAllAssignments,
   getShifts,
+  getMatches,
   syncAssignmentsWithSubmittedMatches,
+  subscribeToAssignments,
+  subscribeToShifts,
+  subscribeToMatches,
+  loadAssignmentsFromFirestore,
+  loadShiftsFromFirestore,
 } from "./AssignmentHelpers";
 
 export default function MyAssignmentsTab() {
@@ -33,6 +39,7 @@ export default function MyAssignmentsTab() {
   const [selectedScouter, setSelectedScouter] = useState(null);
   const [assignments, setAssignments] = useState({});
   const [shifts, setShifts] = useState([]);
+  const [matches, setMatches] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(1);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
@@ -40,6 +47,7 @@ export default function MyAssignmentsTab() {
   // Load and sync data on mount
   useEffect(() => {
     const loadAndSyncData = async () => {
+      // First load from localStorage (fast)
       const scouters = getScouterList();
       setScouterList(scouters);
 
@@ -48,6 +56,23 @@ export default function MyAssignmentsTab() {
 
       const allShifts = getShifts();
       setShifts(allShifts);
+
+      // Then try to load from Firestore (authoritative)
+      try {
+        const [firestoreAssignments, firestoreShifts] = await Promise.all([
+          loadAssignmentsFromFirestore(),
+          loadShiftsFromFirestore(),
+        ]);
+        
+        if (firestoreAssignments && Object.keys(firestoreAssignments).length > 0) {
+          setAssignments(firestoreAssignments);
+        }
+        if (firestoreShifts && firestoreShifts.length > 0) {
+          setShifts(firestoreShifts);
+        }
+      } catch (error) {
+        console.error("Error loading from Firestore:", error);
+      }
 
       // Sync with Firebase to check for submitted matches
       setSyncing(true);
@@ -62,7 +87,20 @@ export default function MyAssignmentsTab() {
 
     loadAndSyncData();
 
-    // Listen for storage changes
+    // Set up real-time listeners for Firestore updates
+    const unsubscribeAssignments = subscribeToAssignments((updatedAssignments) => {
+      setAssignments(updatedAssignments);
+    });
+
+    const unsubscribeShifts = subscribeToShifts((updatedShifts) => {
+      setShifts(updatedShifts);
+    });
+
+    const unsubscribeMatches = subscribeToMatches((updatedMatches) => {
+      setMatches(updatedMatches);
+    });
+
+    // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = () => {
       loadAndSyncData();
     };
@@ -73,6 +111,9 @@ export default function MyAssignmentsTab() {
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("assignmentsUpdated", handleStorageChange);
+      if (unsubscribeAssignments) unsubscribeAssignments();
+      if (unsubscribeShifts) unsubscribeShifts();
+      if (unsubscribeMatches) unsubscribeMatches();
     };
   }, []);
 
