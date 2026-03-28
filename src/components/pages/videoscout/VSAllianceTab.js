@@ -254,7 +254,10 @@ export default function VSAllianceTab(props) {
         isTwoTimeSpeed
           ? result.scoreTimeline.map((e) => ({
               ...e,
-              timestamp: e.timestamp * 2,
+              // Convert video time to scoreboard time:
+              // 1. Multiply by 2 to adjust for 2x speed video
+              // 2. Divide by (163/157) = multiply by (157/163) to convert video time to scoreboard time
+              timestamp: e.timestamp * 2 * (.97), //0.963190184
             }))
           : result.scoreTimeline
       );
