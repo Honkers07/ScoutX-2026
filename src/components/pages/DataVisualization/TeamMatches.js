@@ -130,6 +130,13 @@ const TeamMatches = () => {
     );
   };
 
+  // Get weight based on data quality color range
+  const getQualityWeight = (quality) => {
+    if (!quality || quality < 0.5) return 0.333;  // Red: 33.3%
+    if (quality < 0.75) return 0.666;             // Yellow: 66.6%
+    return 1.0;                                   // Green: 100%
+  };
+
   const handleAverages = (matchData) => {
     if (matchData.length === 1) return matchData;
 
@@ -145,6 +152,26 @@ const TeamMatches = () => {
     const numMatches = last5Matches.length;
 
     let averageMatch = { matchNumber: "Average (Last 5)" };
+
+    // Calculate total weight based on fixed percentages
+    let totalWeight = 0;
+    last5Matches.forEach((match) => {
+      totalWeight += getQualityWeight(match.dataQuality);
+    });
+
+    // Sum fields for weighted average
+    const weightedSums = {
+      autoFuel: 0,
+      teleFuel: 0,
+      totalFuel: 0,
+      ballsPerSecond: 0,
+      shootingTime: 0,
+      autoClimb: 0,
+      teleClimb: 0,
+      totalClimb: 0,
+    };
+
+    // Sum fields for simple average (data quality)
     const sumFields = {
       autoFuel: 0,
       teleFuel: 0,
@@ -159,6 +186,20 @@ const TeamMatches = () => {
 
     // Sum up all numerical fields from last 5 matches
     last5Matches.forEach((match) => {
+      const quality = match.dataQuality || 0;
+      const weight = getQualityWeight(quality);
+
+      // For weighted averages
+      weightedSums.autoFuel += (match.autoFuel || 0) * weight;
+      weightedSums.teleFuel += (match.teleFuel || 0) * weight;
+      weightedSums.totalFuel += (match.totalFuel || 0) * weight;
+      weightedSums.ballsPerSecond += (match.ballsPerSecond || 0) * weight;
+      weightedSums.shootingTime += (match.shootingTime || 0) * weight;
+      weightedSums.autoClimb += (match.autoClimb || 0) * weight;
+      weightedSums.teleClimb += (match.teleClimb || 0) * weight;
+      weightedSums.totalClimb += (match.totalClimb || 0) * weight;
+
+      // For simple sums
       sumFields.autoFuel += match.autoFuel || 0;
       sumFields.teleFuel += match.teleFuel || 0;
       sumFields.totalFuel += match.totalFuel || 0;
@@ -167,34 +208,64 @@ const TeamMatches = () => {
       sumFields.autoClimb += match.autoClimb || 0;
       sumFields.teleClimb += match.teleClimb || 0;
       sumFields.totalClimb += match.totalClimb || 0;
-      sumFields.dataQuality += match.quality || 0;
+      sumFields.dataQuality += quality;
     });
 
-    // Compute averages
-    averageMatch.autoFuel = parseFloat(
-      (sumFields.autoFuel / numMatches).toFixed(1)
-    );
-    averageMatch.teleFuel = parseFloat(
-      (sumFields.teleFuel / numMatches).toFixed(1)
-    );
-    averageMatch.totalFuel = parseFloat(
-      (sumFields.totalFuel / numMatches).toFixed(1)
-    );
-    averageMatch.ballsPerSecond = parseFloat(
-      (sumFields.ballsPerSecond / numMatches).toFixed(1)
-    );
-    averageMatch.shootingTime = parseFloat(
-      (sumFields.shootingTime / numMatches).toFixed(1)
-    );
-    averageMatch.autoClimb = parseFloat(
-      (sumFields.autoClimb / numMatches).toFixed(1)
-    );
-    averageMatch.teleClimb = parseFloat(
-      (sumFields.teleClimb / numMatches).toFixed(1)
-    );
-    averageMatch.totalClimb = parseFloat(
-      (sumFields.totalClimb / numMatches).toFixed(1)
-    );
+    // Compute weighted averages for metrics, fall back to simple average if no weight
+    if (totalWeight > 0) {
+      averageMatch.autoFuel = parseFloat(
+        (weightedSums.autoFuel / totalWeight).toFixed(1)
+      );
+      averageMatch.teleFuel = parseFloat(
+        (weightedSums.teleFuel / totalWeight).toFixed(1)
+      );
+      averageMatch.totalFuel = parseFloat(
+        (weightedSums.totalFuel / totalWeight).toFixed(1)
+      );
+      averageMatch.ballsPerSecond = parseFloat(
+        (weightedSums.ballsPerSecond / totalWeight).toFixed(1)
+      );
+      averageMatch.shootingTime = parseFloat(
+        (weightedSums.shootingTime / totalWeight).toFixed(1)
+      );
+      averageMatch.autoClimb = parseFloat(
+        (weightedSums.autoClimb / totalWeight).toFixed(1)
+      );
+      averageMatch.teleClimb = parseFloat(
+        (weightedSums.teleClimb / totalWeight).toFixed(1)
+      );
+      averageMatch.totalClimb = parseFloat(
+        (weightedSums.totalClimb / totalWeight).toFixed(1)
+      );
+    } else {
+      // Fall back to simple average
+      averageMatch.autoFuel = parseFloat(
+        (sumFields.autoFuel / numMatches).toFixed(1)
+      );
+      averageMatch.teleFuel = parseFloat(
+        (sumFields.teleFuel / numMatches).toFixed(1)
+      );
+      averageMatch.totalFuel = parseFloat(
+        (sumFields.totalFuel / numMatches).toFixed(1)
+      );
+      averageMatch.ballsPerSecond = parseFloat(
+        (sumFields.ballsPerSecond / numMatches).toFixed(1)
+      );
+      averageMatch.shootingTime = parseFloat(
+        (sumFields.shootingTime / numMatches).toFixed(1)
+      );
+      averageMatch.autoClimb = parseFloat(
+        (sumFields.autoClimb / numMatches).toFixed(1)
+      );
+      averageMatch.teleClimb = parseFloat(
+        (sumFields.teleClimb / numMatches).toFixed(1)
+      );
+      averageMatch.totalClimb = parseFloat(
+        (sumFields.totalClimb / numMatches).toFixed(1)
+      );
+    }
+
+    // Data quality is always a simple average (not weighted)
     averageMatch.dataQuality = parseFloat(
       (sumFields.dataQuality / numMatches).toFixed(2)
     );
@@ -488,7 +559,7 @@ const TeamMatches = () => {
                                     ? match.matchNumber ===
                                         "Average (Last 5)" ||
                                       match.matchNumber === "Average"
-                                      ? "white"
+                                      ? getDataQualityColor(match.dataQuality)
                                       : getDataQualityColor(match.dataQuality)
                                     : "white",
                                 fontWeight: column === "normal",
@@ -497,7 +568,7 @@ const TeamMatches = () => {
                               {column === "dataQuality"
                                 ? match.matchNumber === "Average (Last 5)" ||
                                   match.matchNumber === "Average"
-                                  ? "N/A"
+                                  ? getDataQualityIcon(match.dataQuality)
                                   : getDataQualityIcon(match.dataQuality)
                                 : typeof match[column] === "number"
                                 ? Number(match[column].toFixed(1))
