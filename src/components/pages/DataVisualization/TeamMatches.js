@@ -34,6 +34,7 @@ const TeamMatches = () => {
   const [error, setError] = useState(""); // To track errors
   const [restoreMatch, setRestoreMatch] = useState(""); // Selected match to restore
   const [teamToRestore, setTeamToRestore] = useState("");
+  const [averageMode, setAverageMode] = useState("last5"); // "last5" or "total"
 
   // Column fields for the new data structure
   const columns = [
@@ -109,7 +110,7 @@ const TeamMatches = () => {
       // Sort by match number
       matchData.sort((a, b) => a.matchNumber - b.matchNumber);
 
-      const updatedMatchData = handleAverages(matchData);
+      const updatedMatchData = handleAverages(matchData, averageMode);
 
       // Update matches with the new matchData for this team
       setMatches((prevMatches) => [
@@ -137,25 +138,44 @@ const TeamMatches = () => {
     return 1.0;                                   // Green: 100%
   };
 
-  const handleAverages = (matchData) => {
+  const handleAverages = (matchData, mode = "last5") => {
     if (matchData.length === 1) return matchData;
 
     // Ensure we are only working with valid matches (no "Average")
     const filteredMatchData = matchData.filter(
-      (match) => match.matchNumber !== "Average"
+      (match) => match.matchNumber !== "Average" && match.matchNumber !== "Average (Last 5)" && match.matchNumber !== "Average (Total)"
     );
 
     if (filteredMatchData.length === 0) return [];
 
-    // Use last 5 matches for average (or all if less than 5)
-    const last5Matches = filteredMatchData.slice(-5);
-    const numMatches = last5Matches.length;
+    // Sort matches by match number (numerically) to ensure last 5 is based on match number order
+    const sortedByMatchNumber = [...filteredMatchData].sort((a, b) => {
+      const matchA = parseInt(a.matchNumber, 10) || 0;
+      const matchB = parseInt(b.matchNumber, 10) || 0;
+      return matchA - matchB;
+    });
 
-    let averageMatch = { matchNumber: "Average (Last 5)" };
+    // Determine which matches to use based on mode
+    let matchesToAverage;
+    let averageLabel;
+    
+    if (mode === "last5") {
+      // Use last 5 matches based on match number
+      matchesToAverage = sortedByMatchNumber.slice(-5);
+      averageLabel = "Average (Last 5)";
+    } else {
+      // Use all matches
+      matchesToAverage = sortedByMatchNumber;
+      averageLabel = "Average (Total)";
+    }
+    
+    const numMatches = matchesToAverage.length;
+
+    let averageMatch = { matchNumber: averageLabel };
 
     // Calculate total weight based on fixed percentages
     let totalWeight = 0;
-    last5Matches.forEach((match) => {
+    matchesToAverage.forEach((match) => {
       totalWeight += getQualityWeight(match.dataQuality);
     });
 
@@ -184,8 +204,8 @@ const TeamMatches = () => {
       dataQuality: 0,
     };
 
-    // Sum up all numerical fields from last 5 matches
-    last5Matches.forEach((match) => {
+    // Sum up all numerical fields from the matches to average
+    matchesToAverage.forEach((match) => {
       const quality = match.dataQuality || 0;
       const weight = getQualityWeight(quality);
 
@@ -281,16 +301,15 @@ const TeamMatches = () => {
 
     const teamData = matches.find((teamData) => teamData.team === team);
 
-    if (teamData.matchData.length > 2) {
-      const updatedMatchData = teamData.matchData.filter(
-        (match) => match.matchNumber !== matchNumber
-      );
+    // Filter out the average row and the deleted match
+    const matchesOnly = teamData.matchData.filter(
+      (match) => match.matchNumber !== "Average (Last 5)" && match.matchNumber !== "Average (Total)" && match.matchNumber !== matchNumber
+    );
 
-      const deletedMatch = teamData.matchData.find(
-        (match) => match.matchNumber === matchNumber
-      );
-
-      const newMatchDataWithAverages = handleAverages(updatedMatchData);
+    // Check we still have matches remaining (not including average)
+    if (matchesOnly.length >= 1) {
+      // Now calculate averages from the remaining matches
+      const newMatchDataWithAverages = handleAverages(matchesOnly, averageMode);
 
       // Update matches state
       setMatches(
@@ -302,6 +321,9 @@ const TeamMatches = () => {
       );
 
       // Store deleted row
+      const deletedMatch = teamData.matchData.find(
+        (match) => match.matchNumber === matchNumber
+      );
       setDeletedRows((prevState) => ({
         ...prevState,
         [team]: [...(prevState[team] || []), deletedMatch],
@@ -322,9 +344,14 @@ const TeamMatches = () => {
     setMatches(
       matches.map((teamData) => {
         if (teamData.team === teamToRestore) {
-          const updatedMatchData = [...teamData.matchData, matchToRestore];
+          // Filter out both average row types first
+          const matchesOnly = teamData.matchData.filter(
+            (match) => match.matchNumber !== "Average (Last 5)" && match.matchNumber !== "Average (Total)"
+          );
+          // Add the restored match
+          const updatedMatchData = [...matchesOnly, matchToRestore];
 
-          const newMatchDataWithAverages = handleAverages(updatedMatchData);
+          const newMatchDataWithAverages = handleAverages(updatedMatchData, averageMode);
 
           return {
             ...teamData,
@@ -365,8 +392,12 @@ const TeamMatches = () => {
   const sortedData = matches.map((teamData) => ({
     ...teamData,
     matchData: [...teamData.matchData].sort((a, b) => {
-      if (a.matchNumber === "Average (Last 5)") return -1;
-      if (b.matchNumber === "Average (Last 5)") return 1;
+      // Handle both average types
+      const isAvgA = a.matchNumber === "Average (Last 5)" || a.matchNumber === "Average (Total)";
+      const isAvgB = b.matchNumber === "Average (Last 5)" || b.matchNumber === "Average (Total)";
+      
+      if (isAvgA) return -1;
+      if (isAvgB) return 1;
 
       const valueA = a[sortBy];
       const valueB = b[sortBy];
@@ -452,12 +483,39 @@ const TeamMatches = () => {
         variant="caption"
         sx={{ display: "block", mt: 1, color: "gray" }}
       >
-        * Averages are calculated from the last 5 matches
+        * Averages are calculated from the {averageMode === "last5" ? "last 5" : "total"} matches (not removed by user)
       </Typography>
 
       {matches.length > 0 && (
         <Stack direction={"column"} spacing={4} mt={9}>
           <TeamGraphs matches={matches} />
+
+          {/* Full width toggle for average mode - below graphs, above tables */}
+          <Button
+            variant={averageMode === "total" ? "contained" : "outlined"}
+            color="primary"
+            fullWidth
+            onClick={() => {
+              const newMode = averageMode === "total" ? "last5" : "total";
+              setAverageMode(newMode);
+              // Recalculate averages for all teams
+              setMatches((prevMatches) =>
+                prevMatches.map((td) => {
+                  const matchesOnly = td.matchData.filter(
+                    (match) =>
+                      match.matchNumber !== "Average (Last 5)" &&
+                      match.matchNumber !== "Average (Total)"
+                  );
+                  return {
+                    ...td,
+                    matchData: handleAverages(matchesOnly, newMode),
+                  };
+                })
+              );
+            }}
+          >
+            {averageMode === "total" ? "Total Average" : "Last 5 Average"}
+          </Button>
 
           <Box>
             {/* Displaying filtered and sorted data */}
@@ -492,9 +550,9 @@ const TeamMatches = () => {
                     sx={{
                       width: "75%",
                       backgroundColor: "grey.800",
-                      marginY: 4,
+                      marginY: 2,
                       mt: 2,
-                      mb: 4,
+                      mb: 2,
                     }}
                   />
                   <Table sx={{ minWidth: 650, backgroundColor: "#f57c00" }}>
@@ -534,7 +592,7 @@ const TeamMatches = () => {
                           }}
                         >
                           <TableCell>
-                            {match.matchNumber !== "Average (Last 5)" ? (
+                            {match.matchNumber !== "Average (Last 5)" && match.matchNumber !== "Average (Total)" ? (
                               <IconButton
                                 sx={{ color: "primary", fontSize: 20 }}
                                 onClick={() =>
@@ -558,6 +616,7 @@ const TeamMatches = () => {
                                   column === "dataQuality"
                                     ? match.matchNumber ===
                                         "Average (Last 5)" ||
+                                      match.matchNumber === "Average (Total)" ||
                                       match.matchNumber === "Average"
                                       ? getDataQualityColor(match.dataQuality)
                                       : getDataQualityColor(match.dataQuality)
@@ -567,6 +626,7 @@ const TeamMatches = () => {
                             >
                               {column === "dataQuality"
                                 ? match.matchNumber === "Average (Last 5)" ||
+                                  match.matchNumber === "Average (Total)" ||
                                   match.matchNumber === "Average"
                                   ? getDataQualityIcon(match.dataQuality)
                                   : getDataQualityIcon(match.dataQuality)
