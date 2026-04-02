@@ -7,8 +7,6 @@ import {
   Alert,
   Typography,
   Paper,
-  Card,
-  CardContent,
   Stack,
   CircularProgress,
   FormControl,
@@ -19,7 +17,6 @@ import {
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EventIcon from "@mui/icons-material/Event";
-import DeleteIcon from "@mui/icons-material/Delete";
 import ShiftPanel from "./ShiftPanel";
 import ScouterList from "./ScouterList";
 import ScouterSelectionModal from "./ScouterSelectionModal";
@@ -33,7 +30,6 @@ import {
   regenerateAssignmentsFromShifts,
   updateShiftScouter,
   importMatchesFromTBA,
-  saveShifts,
   saveShiftsBoth,
   saveAssignmentsBoth,
   saveMatchesBoth,
@@ -52,13 +48,17 @@ import {
   subscribeToGlobalScouterPool,
 } from "./AssignmentHelpers";
 import { doc, onSnapshot, collection } from "firebase/firestore";
-import { ADMIN_PASSWORD } from "./AssignmentConstants";
 import { useAuth } from "../../AuthContext";
 import firebase from "../../../firebase";
 
-export default function AdminAssignmentsTab() {
+export default function TeamShiftPanel({ 
+  teamNumber: initialTeamNumber = null,
+  showTeamSelector = true,
+  compact = false,
+  onTeamChange = null,
+}) {
   const { user, getAllTeams, getTeamScouters, removeScouter, addScouter } = useAuth();
-  const [teamNumber, setTeamNumber] = useState(undefined);
+  const [teamNumber, setTeamNumber] = useState(initialTeamNumber);
   const [availableTeams, setAvailableTeams] = useState([]);
   const [eventCode, setEventCode] = useState(() => getEventCode(teamNumber));
   const [tbaApiKey, setTbaApiKey] = useState(() => localStorage.getItem("tbaApiKey") || "");
@@ -71,6 +71,14 @@ export default function AdminAssignmentsTab() {
   const [editingEnabled, setEditingEnabled] = useState(false);
   const [selectionModalOpen, setSelectionModalOpen] = useState(false);
   const [selectedScoutersForShift, setSelectedScoutersForShift] = useState([]);
+
+  // Handle team change
+  const handleTeamChange = (newTeamNumber) => {
+    setTeamNumber(newTeamNumber);
+    if (onTeamChange) {
+      onTeamChange(newTeamNumber);
+    }
+  };
 
   // Handle opening selection modal with all scouters pre-selected
   const handleOpenSelectionModal = () => {
@@ -87,28 +95,34 @@ export default function AdminAssignmentsTab() {
     }
   };
 
-  // Auto-select team when only one team is available
-  useEffect(() => {
-    if (availableTeams.length === 1 && !teamNumber) {
-      setTeamNumber(availableTeams[0].teamNumber);
-    }
-  }, [availableTeams, teamNumber]);
-
   // Load initial data from Firestore and set up real-time listeners
   useEffect(() => {
     const loadData = async () => {
+      // Initialize default scouter pool if no team selected
+      if (!teamNumber) {
+        initializeDefaultScouterPool(null);
+      }
+
       if (!teamNumber) {
         // Load available teams if no team selected
         const teams = await getAllTeams();
         setAvailableTeams(teams);
         
-        // Auto-select if only one team exists
-        if (teams.length === 1) {
-          setTeamNumber(teams[0].teamNumber);
-          return;
+        // Try to load global scouter pool from Firestore first (authoritative)
+        try {
+          const firestoreScouters = await loadScouterPoolFromFirestore();
+          if (firestoreScouters && firestoreScouters.length > 0) {
+            setScouterList(firestoreScouters);
+            saveScouterPool(firestoreScouters, null);
+            return;
+          }
+        } catch (error) {
+          console.error("Error loading global scouter pool:", error);
         }
         
-        // No team selected yet - show message to select one
+        // Fallback to local default pool
+        const defaultScouters = getScouterList(null);
+        setScouterList(defaultScouters);
         return;
       }
 
@@ -416,39 +430,46 @@ export default function AdminAssignmentsTab() {
   const coverage = getCoverageStats();
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Team Selector - Required */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Team Selection
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
-            <FormControl fullWidth>
-              <InputLabel>Select Team</InputLabel>
-              <Select
-                value={teamNumber ?? ""}
-                label="Select Team"
-                onChange={(e) => setTeamNumber(e.target.value ? parseInt(e.target.value) : undefined)}
-              >
-                {availableTeams.map((team) => (
-                  <MenuItem key={team.id} value={team.teamNumber}>
-                    Team {team.teamNumber} ({team.scouters?.length || 0} scouters)
+    <Box sx={{ p: compact ? 1 : 3 }}>
+      {/* Team Selector */}
+      {showTeamSelector && (
+        <Paper sx={{ p: compact ? 2 : 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Team Selection
+          </Typography>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth>
+                <InputLabel>Select Team</InputLabel>
+                <Select
+                  value={teamNumber || ""}
+                  label="Select Team"
+                  onChange={(e) => handleTeamChange(e.target.value ? parseInt(e.target.value) : null)}
+                >
+                  <MenuItem value="">
+                    <em>Select a team</em>
                   </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                  {availableTeams.map((team) => (
+                    <MenuItem key={team.id} value={team.teamNumber}>
+                      Team {team.teamNumber} ({team.scouters?.length || 0} scouters)
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            {teamNumber && (
+              <Grid item xs={12} md={4}>
+                <Typography variant="body2" color="text.secondary">
+                  {scouterList.length} scouters in team pool
+                </Typography>
+              </Grid>
+            )}
           </Grid>
-          <Grid item xs={12} md={4}>
-            <Typography variant="body2" color="text.secondary">
-              {teamNumber ? `${scouterList.length} scouters in team pool` : 'Select a team to manage assignments'}
-            </Typography>
-          </Grid>
-        </Grid>
-      </Paper>
+        </Paper>
+      )}
 
       {/* Event & Schedule Controls */}
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <Paper sx={{ p: compact ? 2 : 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
           <EventIcon sx={{ mr: 1, verticalAlign: "middle" }} />
           Event & Schedule Controls
@@ -475,6 +496,7 @@ export default function AdminAssignmentsTab() {
               onChange={(e) => setEventCode(e.target.value)}
               placeholder="e.g., 2026tuis4"
               helperText="The Blue Alliance event key"
+              size={compact ? "small" : "medium"}
             />
           </Grid>
           <Grid item xs={12} md={4}>
@@ -490,6 +512,7 @@ export default function AdminAssignmentsTab() {
               }}
               placeholder="Your TBA auth key"
               helperText="Get from your TBA account"
+              size={compact ? "small" : "medium"}
             />
           </Grid>
           <Grid item xs={12} md={4}>
@@ -499,6 +522,7 @@ export default function AdminAssignmentsTab() {
               startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <CloudDownloadIcon />}
               onClick={handleImportMatches}
               disabled={loading}
+              size={compact ? "small" : "medium"}
             >
               Import Matches
             </Button>
@@ -512,6 +536,7 @@ export default function AdminAssignmentsTab() {
             startIcon={<AutoAwesomeIcon />}
             onClick={handleOpenSelectionModal}
             disabled={matches.length === 0}
+            size={compact ? "small" : "medium"}
           >
             Auto Generate (Shift-Based)
           </Button>
@@ -531,7 +556,7 @@ export default function AdminAssignmentsTab() {
       <Grid container spacing={3}>
         {/* Left Panel - Shift Groups */}
         {shifts.length > 0 && (
-          <Grid item xs={12} md={3}>
+          <Grid item xs={12} md={6}>
             <ShiftPanel
               shifts={shifts}
               onUpdateShiftScouter={handleUpdateShiftScouter}
@@ -543,68 +568,14 @@ export default function AdminAssignmentsTab() {
           </Grid>
         )}
 
-        {/* Scouter List */}
-        <Grid item xs={12} md={shifts.length > 0 ? 3 : 4}>
+        {/* Right Panel - Scouter List */}
+        <Grid item xs={12} md={shifts.length > 0 ? 6 : 12}>
           <ScouterList
             scouters={scouterList}
-            selectedScouter={null}
-            onSelectScouter={() => {}}
             onRemoveScouter={handleRemoveScouter}
             onAddScouter={handleAddScouter}
-            showRemoveButton={true}
-            title="Scouter Pool"
+            teamNumber={teamNumber}
           />
-        </Grid>
-
-        {/* Match Assignment Panel */}
-        <Grid item xs={12} md={shifts.length > 0 ? 6 : 8}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Match Assignment Overview
-            </Typography>
-
-            {matches.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No matches imported yet. Enter an event code and click "Import
-                Matches" to get started.
-              </Typography>
-            ) : (
-              <Stack spacing={2}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h4" color="primary">
-                      {matches.length}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Matches
-                    </Typography>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent>
-                    <Typography variant="h4" color="primary">
-                      {scouterList.length}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Scouters in Pool
-                    </Typography>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent>
-                    <Typography variant="h4" color="secondary">
-                      {shifts.length}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Shifts Generated
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Stack>
-            )}
-          </Paper>
         </Grid>
       </Grid>
 
@@ -612,13 +583,10 @@ export default function AdminAssignmentsTab() {
       <ScouterSelectionModal
         open={selectionModalOpen}
         onClose={() => setSelectionModalOpen(false)}
-        availableScouters={scouterList}
-        selectedScouters={selectedScoutersForShift}
-        matchCount={matches.length}
-        onConfirm={(selected) => {
-          setSelectedScoutersForShift(selected);
-          handleGenerateShifts(selected);
-        }}
+        scouters={selectedScoutersForShift}
+        onScoutersChange={setSelectedScoutersForShift}
+        onGenerate={handleGenerateShifts}
+        allScouters={scouterList}
       />
     </Box>
   );

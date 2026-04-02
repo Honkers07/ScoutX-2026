@@ -1,12 +1,14 @@
-import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Tabs, Tab, Paper } from "@mui/material";
+import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Tabs, Tab, Paper, Drawer, Fab } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import VideoScoutData from "../VideoScoutData";
 import CloseIcon from "@mui/icons-material/Close";
+import SettingsIcon from "@mui/icons-material/Settings";
 import VSPrematch from "./videoscout/VSPrematch";
 import VSAllianceTab from "./videoscout/VSAllianceTab";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import SendIcon from "@mui/icons-material/Send";
+import TeamShiftPanel from "./Assignments/TeamShiftPanel";
 
 
 const VideoStage = {
@@ -39,23 +41,15 @@ const savePersistedData = (data) => {
    }
 };
 
-// Clear persisted data
-const clearPersistedData = () => {
-   try {
-      sessionStorage.removeItem(STORAGE_KEY);
-   } catch (e) {
-      console.error('[VideoScout] Error clearing persisted data:', e);
-   }
-};
-
 
 export default function VideoScout() {
    const [alert, setAlert] = useState({ open: false, message: "", severity: "success" });
-   const [dataKey, setDataKey] = useState(0); // Used to force re-creation of VSPrematch
+   const [dataKey, setDataKey] = useState(0);
    const dataRef = useRef(new VideoScoutData(setAlert));
    
    const [stage, setStage] = useState(VideoStage.PRE_MATCH);
-   const [currentTab, setCurrentTab] = useState(0); // 0 = Red, 1 = Blue
+   const [currentTab, setCurrentTab] = useState(0);
+   const [shiftPanelOpen, setShiftPanelOpen] = useState(false);
 
    // Alliance tab stages - passed to children
    const [redStage, setRedStage] = useState(0);
@@ -152,7 +146,6 @@ export default function VideoScout() {
    useEffect(() => {
       const handleOrientationChange = () => {
          console.log('[VideoScout] Orientation changed, reloading data...');
-         // Reload data from sessionStorage
          const saved = loadPersistedData();
          if (saved) {
             if (saved.stage !== undefined) {
@@ -233,7 +226,7 @@ export default function VideoScout() {
        if (success) {
            // Reset all state
            dataRef.current = new VideoScoutData(setAlert);
-           setDataKey(prev => prev + 1); // Force VSPrematch to re-render with new data
+           setDataKey(prev => prev + 1);
            setRedScoreTimeline([]);
            setRedTotalScore(0);
            setRedVideoFile(null);
@@ -262,6 +255,38 @@ export default function VideoScout() {
 
    return (
        <Container>
+            {/* Shift Panel Drawer */}
+            <Drawer
+                anchor="right"
+                open={shiftPanelOpen}
+                onClose={() => setShiftPanelOpen(false)}
+                PaperProps={{
+                    sx: {
+                        width: { xs: "100%", sm: 400, md: 500 },
+                        bgcolor: "background.paper",
+                    },
+                }}
+            >
+                <TeamShiftPanel
+                    showTeamSelector={true}
+                    compact={true}
+                />
+            </Drawer>
+
+            {/* Floating Action Button to open shift panel */}
+            <Fab
+                color="primary"
+                aria-label="shift settings"
+                onClick={() => setShiftPanelOpen(true)}
+                sx={{
+                    position: "fixed",
+                    bottom: 16,
+                    right: 16,
+                    zIndex: 1000,
+                }}
+            >
+                <SettingsIcon />
+            </Fab>
            <Stack direction="column" spacing={2} mt={2} pb={6} align="center">
                <Typography color={"white"} variant={"h4"} sx={{ mt: 4 }}>
                    Video Scout

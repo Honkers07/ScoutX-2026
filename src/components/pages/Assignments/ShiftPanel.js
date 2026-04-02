@@ -13,7 +13,6 @@ import {
   Chip,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
-import { DEFAULT_SCOUTERS } from "./AssignmentConstants";
 
 export default function ShiftPanel({
   shifts,
@@ -21,6 +20,7 @@ export default function ShiftPanel({
   onSaveChanges,
   editingEnabled,
   onToggleEdit,
+  scouterList = [],
 }) {
   const handleScouterChange = (shiftIndex, positionIndex, newName) => {
     if (onUpdateShiftScouter) {
@@ -79,18 +79,24 @@ export default function ShiftPanel({
                   <FormControl key={posIndex} fullWidth size="small">
                     <InputLabel>{scouter.alliance} Position {scouter.position}</InputLabel>
                     <Select
-                      value={scouter.name}
+                      value={scouter.isPlaceholder ? "" : scouter.name}
                       label={`${scouter.alliance} Position ${scouter.position}`}
                       onChange={(e) =>
                         handleScouterChange(shiftIndex, posIndex, e.target.value)
                       }
                       disabled={!editingEnabled}
                     >
-                      {DEFAULT_SCOUTERS.map((s) => (
-                        <MenuItem key={s} value={s}>
-                          {s}
-                        </MenuItem>
-                      ))}
+                      {/* Empty option for clearing */}
+                      <MenuItem value="">
+                        <em>(Empty)</em>
+                      </MenuItem>
+                      {scouterList
+                        .filter((s) => s) // Filter out empty strings
+                        .map((s) => (
+                          <MenuItem key={s} value={s}>
+                            {s}
+                          </MenuItem>
+                        ))}
                     </Select>
                   </FormControl>
                 ))}
