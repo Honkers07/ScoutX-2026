@@ -15,8 +15,8 @@ import PauseIcon from "@mui/icons-material/Pause";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 
-// Default time crop duration in seconds (168 seconds = 2:48)
-const DEFAULT_TIME_DURATION = 168;
+// Default time crop duration in seconds (full match = 163s)
+const DEFAULT_TIME_DURATION = 163;
 
 // Helper function to format time with hundredths precision (MM:SS.xx)
 const formatTimePrecise = (seconds) => {
@@ -287,7 +287,9 @@ export default function VSVideoCrop(props) {
     }
   }, []);
 
-  // Calculate end time (start + 168 seconds, but not beyond video duration)
+  // Calculate end time (start + duration, but not beyond video duration)
+  // Note: The default time duration is in video time, NOT real/scoreboard time
+  // We pass this to the backend to determine how much video to process
   const endTime = Math.min(startTime + DEFAULT_TIME_DURATION, videoDuration);
 
   const handleConfirm = () => {
