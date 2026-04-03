@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import {
   Box,
   Grid,
@@ -21,6 +21,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ScouterList from "./ScouterList";
+import { useAuth } from "../../AuthContext";
 import {
   getScouterList,
   getAllAssignments,
@@ -32,9 +33,12 @@ import {
   subscribeToMatches,
   loadAssignmentsFromFirestore,
   loadShiftsFromFirestore,
+  saveScouterPool,
 } from "./AssignmentHelpers";
 
 export default function MyAssignmentsTab() {
+  const { user, getTeamScouters } = useAuth();
+  const teamNumber = user?.teamNumber;
   const [scouterList, setScouterList] = useState([]);
   const [selectedScouter, setSelectedScouter] = useState(null);
   const [assignments, setAssignments] = useState({});
@@ -47,21 +51,37 @@ export default function MyAssignmentsTab() {
   // Load and sync data on mount
   useEffect(() => {
     const loadAndSyncData = async () => {
-      // First load from localStorage (fast)
-      const scouters = getScouterList();
-      setScouterList(scouters);
+      if (!teamNumber) {
+        // User not logged in or no team assigned yet
+        setScouterList([]);
+        setAssignments({});
+        setShifts([]);
+        return;
+      }
 
-      const allAssignments = getAllAssignments();
+      // Load from Firestore directly (authoritative) - this includes teamNumber
+      const firestoreScouters = await getTeamScouters(teamNumber);
+      if (firestoreScouters && firestoreScouters.length > 0) {
+        setScouterList(firestoreScouters);
+        // Also store to localStorage for other components
+        saveScouterPool(firestoreScouters, teamNumber);
+      } else {
+        // Fallback to localStorage
+        const scouters = getScouterList(teamNumber);
+        setScouterList(scouters);
+      }
+
+      const allAssignments = getAllAssignments(teamNumber);
       setAssignments(allAssignments);
 
-      const allShifts = getShifts();
+      const allShifts = getShifts(teamNumber);
       setShifts(allShifts);
 
       // Then try to load from Firestore (authoritative)
       try {
         const [firestoreAssignments, firestoreShifts] = await Promise.all([
-          loadAssignmentsFromFirestore(),
-          loadShiftsFromFirestore(),
+          loadAssignmentsFromFirestore(teamNumber),
+          loadShiftsFromFirestore(teamNumber),
         ]);
         
         if (firestoreAssignments && Object.keys(firestoreAssignments).length > 0) {
@@ -76,12 +96,12 @@ export default function MyAssignmentsTab() {
 
       // Sync with Firebase to check for submitted matches
       setSyncing(true);
-      await syncAssignmentsWithSubmittedMatches();
+      await syncAssignmentsWithSubmittedMatches(teamNumber);
       setSyncing(false);
       setLastSync(new Date());
 
       // Reload assignments after sync
-      const syncedAssignments = getAllAssignments();
+      const syncedAssignments = getAllAssignments(teamNumber);
       setAssignments(syncedAssignments);
     };
 
@@ -90,15 +110,15 @@ export default function MyAssignmentsTab() {
     // Set up real-time listeners for Firestore updates
     const unsubscribeAssignments = subscribeToAssignments((updatedAssignments) => {
       setAssignments(updatedAssignments);
-    });
+    }, teamNumber);
 
     const unsubscribeShifts = subscribeToShifts((updatedShifts) => {
       setShifts(updatedShifts);
-    });
+    }, teamNumber);
 
     const unsubscribeMatches = subscribeToMatches((updatedMatches) => {
       setMatches(updatedMatches);
-    });
+    }, teamNumber);
 
     // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = () => {
@@ -115,13 +135,13 @@ export default function MyAssignmentsTab() {
       if (unsubscribeShifts) unsubscribeShifts();
       if (unsubscribeMatches) unsubscribeMatches();
     };
-  }, []);
+  }, [teamNumber, getTeamScouters]);
 
   // Handle manual refresh
   const handleRefresh = async () => {
     setSyncing(true);
-    await syncAssignmentsWithSubmittedMatches();
-    const updatedAssignments = getAllAssignments();
+    await syncAssignmentsWithSubmittedMatches(teamNumber);
+    const updatedAssignments = getAllAssignments(teamNumber);
     setAssignments(updatedAssignments);
     setSyncing(false);
     setLastSync(new Date());
@@ -179,7 +199,7 @@ export default function MyAssignmentsTab() {
       {/* Header with refresh button */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" color="primary">
-          My Assignments
+          My Assignments {teamNumber && <Chip label={`Team ${teamNumber}`} size="small" />}
         </Typography>
         <Button
           variant="outlined"

@@ -11,14 +11,18 @@ import {
   Container,
   Unstable_Grid2 as Grid2,
   TextField,
+  Drawer,
+  Fab,
 } from "@mui/material";
 import { MatchStage } from "../MatchConstants";
 import MatchScoutData from "../MatchScoutData";
 import CloseIcon from "@mui/icons-material/Close";
+import SettingsIcon from "@mui/icons-material/Settings";
 import Gambling from "./Gambling";
 import bgImage from "../../assets/backGround.png";
 import firebase from "../../firebase";
 import { doc, setDoc } from "firebase/firestore";
+import TeamShiftPanel from "./Assignments/TeamShiftPanel";
 
 // Custom Prematch component for Fuel Scout Page
 function FuelPrematch({ data }) {
@@ -437,6 +441,7 @@ export default function FuelScout() {
   );
   const [fuelScored, setFuelScored] = useState([0]);
   const [trackingBursts, setTrackingBursts] = useState(false);
+  const [shiftPanelOpen, setShiftPanelOpen] = useState(false);
 
   const handleStageChange = (newStage) => {
     data.stage = newStage;
@@ -534,8 +539,42 @@ export default function FuelScout() {
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         py: 3,
+        position: "relative",
       }}
     >
+      {/* Shift Panel Drawer */}
+      <Drawer
+        anchor="right"
+        open={shiftPanelOpen}
+        onClose={() => setShiftPanelOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", sm: 400, md: 500 },
+            bgcolor: "background.paper",
+          },
+        }}
+      >
+        <TeamShiftPanel
+          showTeamSelector={true}
+          compact={true}
+        />
+      </Drawer>
+
+      {/* Floating Action Button to open shift panel */}
+      <Fab
+        color="primary"
+        aria-label="shift settings"
+        onClick={() => setShiftPanelOpen(true)}
+        sx={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          zIndex: 1000,
+        }}
+      >
+        <SettingsIcon />
+      </Fab>
+
       <Container maxWidth="md">
         <Stack spacing={3}>
           {/* Header */}
