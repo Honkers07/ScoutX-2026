@@ -185,13 +185,15 @@ function FuelPostmatch({ data }) {
         {[
           { label: "Was Disabled", key: "disabled" },
           { label: "Browns Out / Jittery", key: "brownsOut" },
-          { label: "Tips Over / Wobbly", key: "wobbly" },
+          { label: "Shooter Broken", key: "shooterBroken" },
           { label: "Intake Broken", key: "intakeBroken" },
           { label: "Outtake Broken", key: "outtakeBroken" },
           { label: "Failed Climb", key: "failedClimb" },
           { label: "Trench", key: "trench" },
-          { label: "Defense/Stealing", key: "defense" },
+          { label: "Stole Fuel", key: "stoleFuel" },
           { label: "Shuttle", key: "shuttle" },
+          { label: "Was Defended Against", key: "wasDefendedAgainst" },
+          { label: "Defended", key: "defended" },
         ].map((item) => (
           <Grid2 xs={6} sm={4} key={item.key}>
             <Button
@@ -630,13 +632,15 @@ export default function FuelScout() {
                   // Get post match data
                   const disabled = data.getPostData("disabled");
                   const brownsOut = data.getPostData("brownsOut");
-                  const wobbly = data.getPostData("wobbly");
+                  const shooterBroken = data.getPostData("shooterBroken");
                   const intakeBroken = data.getPostData("intakeBroken");
                   const outtakeBroken = data.getPostData("outtakeBroken");
                   const failedClimb = data.getPostData("failedClimb");
                   const trench = data.getPostData("trench");
-                  const defense = data.getPostData("defense");
+                  const stoleFuel = data.getPostData("stoleFuel");
                   const shuttle = data.getPostData("shuttle");
+                  const wasDefendedAgainst = data.getPostData("wasDefendedAgainst");
+                  const defended = data.getPostData("defended");
 
                   try {
                     await setDoc(
@@ -656,13 +660,15 @@ export default function FuelScout() {
                         burstCount: fuelScored.length - 1,
                         disabled,
                         brownsOut,
-                        wobbly,
+                        shooterBroken,
                         intakeBroken,
                         outtakeBroken,
                         failedClimb,
                         trench,
-                        defense,
+                        stoleFuel,
                         shuttle,
+                        wasDefendedAgainst,
+                        defended,
                         timestamp: Date.now(),
                       }
                     );

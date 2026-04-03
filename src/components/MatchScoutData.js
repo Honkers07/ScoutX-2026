@@ -87,7 +87,7 @@ const defaultData = [
     elevatorBroken: false,
     armBroken: false,
     brownsOut: false,
-    wobbly: false,
+    shooterBroken: false,
     canKnockAlgae: false,
     missesOuttakesConsistently: false,
     slowIntakes: false,
@@ -101,6 +101,9 @@ const defaultData = [
     failedClimb: false,
     trench: false,
     shuttle: false,
+    stoleFuel: false,
+    wasDefendedAgainst: false,
+    defended: false,
   },
   {
     metadatastage: MatchStage.METADATA,
