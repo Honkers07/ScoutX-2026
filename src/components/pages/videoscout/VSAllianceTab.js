@@ -8,6 +8,7 @@ import {
   AlertTitle,
   FormControlLabel,
   Switch,
+  TextField,
 } from "@mui/material";
 import { useState, useRef, useEffect, useCallback } from "react";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -31,6 +32,8 @@ export default function VSAllianceTab(props) {
     setScoreTimeline,
     totalScore,
     setTotalScore,
+    officialScore,
+    setOfficialScore,
     videoFile,
     setVideoFile,
     videoPreview: videoPreviewProp,
@@ -47,6 +50,9 @@ export default function VSAllianceTab(props) {
   const [progress, setProgress] = useState(0); // 0-100 for progress bar
   const [error, setError] = useState(null);
   const [isTwoTimeSpeed, setIsTwoTimeSpeed] = useState(false);
+  const [officialScoreInput, setOfficialScoreInput] = useState(
+    officialScore || ""
+  );
   const videoRef = useRef(null);
   const timeoutIdsRef = useRef([]);
 
@@ -133,9 +139,29 @@ export default function VSAllianceTab(props) {
     return id;
   }, []);
 
+  const handleOfficialScoreChange = (event) => {
+    const value = event.target.value;
+    // Only allow numeric input
+    if (value === "" || /^\d+$/.test(value)) {
+      setOfficialScoreInput(value);
+      // Update parent state with official score
+      if (setOfficialScore) {
+        setOfficialScore(value ? parseInt(value, 10) : null);
+      }
+    }
+  };
+
   const handleVideoSelect = (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Validate official score has been entered
+    if (!officialScoreInput || officialScoreInput.trim() === "") {
+      setError(
+        "Please enter the official final score before selecting a video"
+      );
+      return;
+    }
 
     // Validate file type
     if (!file.type.startsWith("video/")) {
@@ -208,6 +234,11 @@ export default function VSAllianceTab(props) {
       formData.append("cropHeight", crop.height);
       formData.append("alliance", alliance);
 
+      // Add official score for calculating missing fuel in last 3 seconds
+      if (officialScoreInput) {
+        formData.append("officialScore", officialScoreInput);
+      }
+
       // Add time range parameters for temporal cropping
       formData.append("startTime", crop.startTime || 0);
       formData.append("endTime", crop.endTime || 0);
@@ -257,7 +288,7 @@ export default function VSAllianceTab(props) {
               // Convert video time to scoreboard time:
               // 1. Multiply by 2 to adjust for 2x speed video
               // 2. Divide by (163/157) = multiply by (157/163) to convert video time to scoreboard time
-              timestamp: e.timestamp * 2 * (.97), //0.963190184
+              timestamp: e.timestamp * 2 * 0.97, //0.963190184
             }))
           : result.scoreTimeline
       );
@@ -293,6 +324,28 @@ export default function VSAllianceTab(props) {
       <Typography variant="h6" sx={{ mb: 2, color: allianceColor }}>
         Upload {allianceLabel} Scoreboard Video
       </Typography>
+
+      {/* Official Score Input */}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          label="Official Final Score"
+          type="number"
+          value={officialScoreInput}
+          onChange={handleOfficialScoreChange}
+          fullWidth
+          helperText="Enter the official final score from the match results"
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              color: "white",
+              "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+              "&:hover fieldset": { borderColor: allianceColor },
+              "&.Mui-focused fieldset": { borderColor: allianceColor },
+            },
+            "& .MuiInputLabel-root": { color: "rgba(255,255,255,0.7)" },
+            "& .MuiFormHelperText-root": { color: "text.secondary" },
+          }}
+        />
+      </Box>
 
       <FormControlLabel
         control={

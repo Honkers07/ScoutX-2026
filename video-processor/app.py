@@ -93,6 +93,10 @@ def process_video():
         start_time = float(request.form.get('startTime', 0))
         end_time = float(request.form.get('endTime', 0)) if request.form.get('endTime') else None
         
+        # Get official score for calculating missing fuel in last 3 seconds
+        official_score = request.form.get('officialScore')
+        official_score = int(official_score) if official_score else None
+        
         print(f"[API] Processing {alliance} video with crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
         print(f"[API] Time range: start={start_time:.2f}s, end={end_time}s")
         
@@ -184,7 +188,7 @@ def process_video():
             total_score = score_timeline[-1]['score'] if score_timeline else 0
             
             print(f"[API] ✓ Timeline: {len(score_timeline)} changes, total: {total_score}")
-            
+
             return jsonify({
                 'success': True,
                 'scoreTimeline': score_timeline,
@@ -228,6 +232,10 @@ def process_video_stream():
             # Get time range parameters
             start_time = float(request.form.get('startTime', 0))
             end_time = float(request.form.get('endTime', 0)) if request.form.get('endTime') else None
+            
+            # Get official score for reference (not used in stream endpoint for now)
+            official_score = request.form.get('officialScore')
+            official_score = int(official_score) if official_score else None
             
             print(f"[API] Processing {alliance} video with crop: x={crop_x}, y={crop_y}, w={crop_width}, h={crop_height}")
             print(f"[API] Time range: start={start_time:.2f}s, end={end_time}s")
