@@ -18,40 +18,6 @@ import {
   markAssignmentComplete,
 } from "./pages/Assignments/AssignmentHelpers";
 
-// Default scouter pool
-const DEFAULT_SCOUTERS = [
-  "Sophia",
-  "Catie",
-  "Aiden Y",
-  "Aarav",
-  "Eileen",
-  "Ethan H",
-  "Adrian",
-  "Andrew",
-  "Nova",
-  "Ammar",
-  "David",
-  "Brian",
-  "Anthony",
-  "Ty",
-  "Cyrus",
-  "Nolan",
-  "Dylan",
-  "Aditya",
-  "Alexander",
-  "Ethan M",
-  "Logan M",
-  "Timofei",
-  "Saara",
-  "Shaurya",
-  "Elana",
-  "Charlie",
-  "Avyank",
-  "Wesley",
-  "Dylan X",
-  "Eric Y",
-];
-
 const climb = ["No Climb", "L1", "L2", "L3"];
 
 const defaultData = [
@@ -120,15 +86,6 @@ export default class MatchScoutData {
       message: "",
       severity: "success",
     };
-  }
-
-  // Check if a name is in the scouter pool
-  isValidScouter(name) {
-    const savedScouters = localStorage.getItem("scouterPool");
-    const scouterPool = savedScouters
-      ? JSON.parse(savedScouters)
-      : DEFAULT_SCOUTERS;
-    return scouterPool.some((s) => s.toLowerCase() === name.toLowerCase());
   }
 
   // Get assignment for a scouter by name and match number

@@ -6,14 +6,19 @@ import {
   Typography,
   Divider,
   useMediaQuery,
+  Drawer,
+  Fab,
 } from "@mui/material";
+import SettingsIcon from "@mui/icons-material/Settings";
 import DataTable from "./DataTable";
 import TeamMatches from "./TeamMatches";
+import TeamShiftPanel from "../Assignments/TeamShiftPanel";
 
 const DataVisualizationDisplay = () => {
   const [selectedOption, setSelectedOption] = useState(
     "Match Data Visualization"
   );
+  const [shiftPanelOpen, setShiftPanelOpen] = useState(false);
 
   const handleSelection = (option) => {
     setSelectedOption(option);
@@ -33,8 +38,41 @@ const DataVisualizationDisplay = () => {
         flexDirection: "column",
         alignItems: "center",
         padding: 4,
+        position: "relative",
       }}
     >
+      {/* Shift Panel Drawer */}
+      <Drawer
+        anchor="right"
+        open={shiftPanelOpen}
+        onClose={() => setShiftPanelOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", sm: 400, md: 500 },
+            bgcolor: "background.paper",
+          },
+        }}
+      >
+        <TeamShiftPanel
+          showTeamSelector={true}
+          compact={true}
+        />
+      </Drawer>
+
+      {/* Floating Action Button to open shift panel */}
+      <Fab
+        color="primary"
+        aria-label="shift settings"
+        onClick={() => setShiftPanelOpen(true)}
+        sx={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          zIndex: 1000,
+        }}
+      >
+        <SettingsIcon />
+      </Fab>
       <Typography variant="h4">Team Data</Typography>
       <Divider sx={{ width: "50%", backgroundColor: "grey.800", marginY: 4 }} />
       <ButtonGroup

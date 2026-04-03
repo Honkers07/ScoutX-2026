@@ -27,6 +27,13 @@ const DataTable = () => {
 
   const matchDataRef = collection(firebase, "matchData");
 
+  // Get weight based on data quality color range
+  const getQualityWeight = (quality) => {
+    if (!quality || quality < 0.5) return 0.333;  // Red: 33.3%
+    if (quality < 0.75) return 0.666;             // Yellow: 66.6%
+    return 1.0;                                   // Green: 100%
+  };
+
   const calculateAverages = (teamDocs) => {
     // Sort teamDocs by match number to get last 5 matches
     const sortedDocs = [...teamDocs].sort((a, b) => {
@@ -38,33 +45,63 @@ const DataTable = () => {
     // Use last 5 matches (or all if less than 5)
     const last5Docs = sortedDocs.slice(-5);
 
-    // teamDocs is now an array of { doc: document, teamData: team data }
-    const totals = last5Docs.reduce(
+    // Calculate total weight based on fixed percentages
+    let totalWeight = 0;
+    last5Docs.forEach((item) => {
+      const teamData = item.teamData;
+      if (teamData) {
+        totalWeight += getQualityWeight(teamData.quality);
+      }
+    });
+
+    // Calculate weighted sums and simple sums
+    const result = last5Docs.reduce(
       (acc, item) => {
         const teamData = item.teamData;
 
         if (teamData) {
-          acc.autoFuel += teamData.autoFuel || 0;
-          acc.teleFuel += teamData.teleFuel || 0;
-          acc.totalFuel += (teamData.autoFuel || 0) + (teamData.teleFuel || 0);
-          acc.ballsPerSecond += teamData.ballsPerSecond || 0;
-          acc.shootingTime += teamData.shootingTime || 0;
+          const weight = getQualityWeight(teamData.quality);
+          const autoFuel = teamData.autoFuel || 0;
+          const teleFuel = teamData.teleFuel || 0;
+          const totalFuel = autoFuel + teleFuel;
+          const ballsPerSecond = teamData.ballsPerSecond || 0;
+          const shootingTime = teamData.shootingTime || 0;
+
+          // Weighted sums
+          acc.weightedAutoFuel += autoFuel * weight;
+          acc.weightedTeleFuel += teleFuel * weight;
+          acc.weightedTotalFuel += totalFuel * weight;
+          acc.weightedBallsPerSecond += ballsPerSecond * weight;
+          acc.weightedShootingTime += shootingTime * weight;
+
+          // Simple sums
+          acc.simpleAutoFuel += autoFuel;
+          acc.simpleTeleFuel += teleFuel;
+          acc.simpleTotalFuel += totalFuel;
+          acc.simpleBallsPerSecond += ballsPerSecond;
+          acc.simpleShootingTime += shootingTime;
+
           acc.matchCount++;
         }
 
         return acc;
       },
       {
-        autoFuel: 0,
-        teleFuel: 0,
-        totalFuel: 0,
-        ballsPerSecond: 0,
-        shootingTime: 0,
+        weightedAutoFuel: 0,
+        weightedTeleFuel: 0,
+        weightedTotalFuel: 0,
+        weightedBallsPerSecond: 0,
+        weightedShootingTime: 0,
+        simpleAutoFuel: 0,
+        simpleTeleFuel: 0,
+        simpleTotalFuel: 0,
+        simpleBallsPerSecond: 0,
+        simpleShootingTime: 0,
         matchCount: 0,
       }
     );
 
-    const matchCount = totals.matchCount;
+    const matchCount = result.matchCount;
 
     if (matchCount === 0) {
       return {
@@ -75,15 +112,30 @@ const DataTable = () => {
       };
     }
 
-    return {
-      "Average Total Fuel":
-        Math.round((totals.totalFuel / matchCount) * 10) / 10,
-      "Average Auto Fuel": Math.round((totals.autoFuel / matchCount) * 10) / 10,
-      "Average Balls Per Second":
-        Math.round((totals.ballsPerSecond / matchCount) * 100) / 100,
-      "Average Shooting Time":
-        Math.round((totals.shootingTime / matchCount) * 10) / 10,
-    };
+    // Calculate weighted averages (fall back to simple if no weight)
+    if (totalWeight > 0) {
+      return {
+        "Average Total Fuel":
+          Math.round((result.weightedTotalFuel / totalWeight) * 10) / 10,
+        "Average Auto Fuel":
+          Math.round((result.weightedAutoFuel / totalWeight) * 10) / 10,
+        "Average Balls Per Second":
+          Math.round((result.weightedBallsPerSecond / totalWeight) * 100) / 100,
+        "Average Shooting Time":
+          Math.round((result.weightedShootingTime / totalWeight) * 10) / 10,
+      };
+    } else {
+      return {
+        "Average Total Fuel":
+          Math.round((result.simpleTotalFuel / matchCount) * 10) / 10,
+        "Average Auto Fuel":
+          Math.round((result.simpleAutoFuel / matchCount) * 10) / 10,
+        "Average Balls Per Second":
+          Math.round((result.simpleBallsPerSecond / matchCount) * 100) / 100,
+        "Average Shooting Time":
+          Math.round((result.simpleShootingTime / matchCount) * 10) / 10,
+      };
+    }
   };
 
   useEffect(() => {

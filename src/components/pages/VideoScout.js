@@ -15,11 +15,13 @@ import {
 import { useState, useRef, useEffect } from "react";
 import VideoScoutData from "../VideoScoutData";
 import CloseIcon from "@mui/icons-material/Close";
+import SettingsIcon from "@mui/icons-material/Settings";
 import VSPrematch from "./videoscout/VSPrematch";
 import VSAllianceTab from "./videoscout/VSAllianceTab";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import SendIcon from "@mui/icons-material/Send";
+import TeamShiftPanel from "./Assignments/TeamShiftPanel";
 
 const VideoStage = {
   PRE_MATCH: 0,
