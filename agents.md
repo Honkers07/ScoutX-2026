@@ -280,6 +280,150 @@ const handleSubmit = async () => {
 
 The submit method saves to the `matchScoutData` collection with document ID: `team_match`
 
+## Assignment System Documentation
+
+### Overview
+
+The assignment system is designed to efficiently assign scouters to matches using shift-based scheduling. It supports 30+ scouters, automatic shift generation, real-time sync, and persistent storage across Firestore and localStorage.
+
+### Core Components
+
+| File | Purpose |
+|------|---------|
+| [`src/components/pages/Assignments/AdminAssignmentsTab.js`](src/components/pages/Assignments/AdminAssignmentsTab.js:1) | Admin interface for importing matches, generating shifts, and managing assignments |
+| [`src/components/pages/Assignments/MyAssignmentsTab.js`](src/components/pages/Assignments/MyAssignmentsTab.js:1) | Scouter view for viewing personal assignments |
+| [`src/components/pages/Assignments/AssignmentHelpers.js`](src/components/pages/Assignments/AssignmentHelpers.js:1) | All business logic, data loading, generation, and persistence functions |
+| [`src/components/pages/Assignments/AssignmentConstants.js`](src/components/pages/Assignments/AssignmentConstants.js:1) | Configuration constants, default values, and storage keys |
+| [`src/components/pages/Assignments/ShiftPanel.js`](src/components/pages/Assignments/ShiftPanel.js:1) | Shift editing UI component |
+| [`src/components/pages/Assignments/ScouterSelectionModal.js`](src/components/pages/Assignments/ScouterSelectionModal.js:1) | Scouter pool selection modal |
+| [`src/components/pages/Assignments/ScouterList.js`](src/components/pages/Assignments/ScouterList.js:1) | Scouter list management component |
+
+### Firestore Collections
+- `matches` - Imported match schedule from The Blue Alliance
+- `shifts` - Generated shift groups with scouter assignments
+- `assignments` - Individual scouter-to-match assignments
+- `scouters` - Scouter profile information
+
+### Storage Keys (localStorage)
+```
+STORAGE_KEYS.MATCHES = "scoutx_matches"
+STORAGE_KEYS.SHIFTS = "scoutx_shifts"
+STORAGE_KEYS.ASSIGNMENTS = "scoutx_assignments"
+STORAGE_KEYS.EVENT_CODE = "scoutx_event_code"
+STORAGE_KEYS.TBA_API_KEY = "scoutx_tba_api_key"
+```
+
+### Shift Generation Algorithm
+
+```javascript
+function generateShifts(scouters, totalMatches) {
+  // Default configuration:
+  // - 6 scouters per shift (3 Red / 3 Blue)
+  // - Evenly distribute matches across shifts
+  // - Assign scouters in ordered rotation
+  
+  const shiftCount = Math.ceil(scouters.length / DEFAULT_SHIFT_SIZE);
+  const matchesPerShift = Math.ceil(totalMatches / shiftCount);
+  
+  // Split scouters into groups of 6
+  // Assign match ranges to each shift
+  // Generate position assignments for each scouter
+}
+```
+
+#### Shift Calculation Example:
+```
+30 scouters / 6 per shift = 5 total shifts
+74 matches / 5 shifts = ~15 matches per shift
+```
+
+### Data Loading Flow (Admin Page)
+
+1. **Initial Load**:
+   - Load from localStorage first (fast display)
+   - Fetch authoritative data from Firestore
+   - Update state and sync localStorage
+
+2. **Real-time Sync**:
+   - Firestore onSnapshot listeners for shifts, assignments, matches
+   - Auto-update UI when changes are detected
+   - Sync all changes back to localStorage automatically
+
+3. **Dual Storage Pattern**:
+   - All write operations use `save*Both()` functions
+   - Saves simultaneously to localStorage and Firestore
+   - Ensures offline functionality and cloud backup
+
+### Assignment Generation Workflow
+
+1. **Import Matches**:
+   ```
+   Enter Event Code + TBA API Key → Fetch from TBA API → Save matches to Firestore + localStorage
+   ```
+
+2. **Generate Shifts**:
+   ```
+   Select scouter pool → Run shift generation algorithm → Save shifts → Auto-generate assignments
+   ```
+
+3. **Create Assignments**:
+   ```
+   For every match:
+     Find shift containing match number
+     Assign each shift position to corresponding alliance team
+     Generate verification code
+     Store assignment per scouter
+   ```
+
+### Key Helper Functions
+
+| Function | Purpose |
+|----------|---------|
+| `importMatchesFromTBA(eventCode, apiKey)` | Imports full match schedule from The Blue Alliance API |
+| `generateShifts(scouters, matchCount)` | Creates optimized shift groups |
+| `regenerateAssignmentsFromShifts()` | Builds all individual match assignments from shift definitions |
+| `saveMatchesBoth(matches)` | Saves matches to localStorage + Firestore |
+| `saveShiftsBoth(shifts)` | Saves shifts to localStorage + Firestore |
+| `saveAssignmentsBoth(assignments)` | Saves assignments to localStorage + Firestore |
+| `loadMatchesFromFirestore()` | Loads matches from Firestore |
+| `loadShiftsFromFirestore()` | Loads shifts from Firestore |
+| `loadAssignmentsFromFirestore()` | Loads assignments from Firestore |
+| `subscribeToMatches(callback)` | Real-time listener for match changes |
+| `subscribeToShifts(callback)` | Real-time listener for shift changes |
+| `subscribeToAssignments(callback)` | Real-time listener for assignment changes |
+
+### Editing Shifts
+
+- Click "Edit" on any shift
+- Use dropdowns to change scouters at any position
+- All matches in that shift are automatically updated
+- Changes are saved instantly to both storage locations
+
+### Troubleshooting
+
+#### Common Issues:
+
+1. **Only 2 matches showing after refresh**:
+   - ✅ Fixed: Added Firestore match loading on initial page load
+   - Verify matches exist in Firestore `matches` collection
+   - Check localStorage for corrupted match data
+
+2. **Assignments not appearing for scouters**:
+   - Ensure matches were imported before generating shifts
+   - Verify `regenerateAssignmentsFromShifts()` runs after shift generation
+   - Check that Firestore `assignments` collection has documents
+
+3. **Shift count incorrect**:
+   - Default shift size is always 6 scouters per shift
+   - `shiftCount = ceil(scouters / 6)`
+   - 30 scouters = 5 shifts (correct expected behavior)
+
+#### Debugging Tools:
+
+- Open browser DevTools → Application → Local Storage
+- Check Firebase Console → Firestore Database
+- View console logs for Firestore loading status
+
 ## Testing
 
 - Manual testing on multiple devices (phones, tablets, laptops)

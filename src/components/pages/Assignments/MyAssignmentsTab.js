@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -21,7 +21,6 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ScouterList from "./ScouterList";
-import { useAuth } from "../../AuthContext";
 import {
   getScouterList,
   getAllAssignments,
@@ -33,12 +32,10 @@ import {
   subscribeToMatches,
   loadAssignmentsFromFirestore,
   loadShiftsFromFirestore,
-  saveScouterPool,
 } from "./AssignmentHelpers";
 
+
 export default function MyAssignmentsTab() {
-  const { user, getTeamScouters } = useAuth();
-  const teamNumber = user?.teamNumber;
   const [scouterList, setScouterList] = useState([]);
   const [selectedScouter, setSelectedScouter] = useState(null);
   const [assignments, setAssignments] = useState({});
@@ -48,42 +45,30 @@ export default function MyAssignmentsTab() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
+
   // Load and sync data on mount
   useEffect(() => {
     const loadAndSyncData = async () => {
-      if (!teamNumber) {
-        // User not logged in or no team assigned yet
-        setScouterList([]);
-        setAssignments({});
-        setShifts([]);
-        return;
-      }
+      // First load from localStorage (fast)
+      const scouters = getScouterList();
+      setScouterList(scouters);
 
-      // Load from Firestore directly (authoritative) - this includes teamNumber
-      const firestoreScouters = await getTeamScouters(teamNumber);
-      if (firestoreScouters && firestoreScouters.length > 0) {
-        setScouterList(firestoreScouters);
-        // Also store to localStorage for other components
-        saveScouterPool(firestoreScouters, teamNumber);
-      } else {
-        // Fallback to localStorage
-        const scouters = getScouterList(teamNumber);
-        setScouterList(scouters);
-      }
 
-      const allAssignments = getAllAssignments(teamNumber);
+      const allAssignments = getAllAssignments();
       setAssignments(allAssignments);
 
-      const allShifts = getShifts(teamNumber);
+
+      const allShifts = getShifts();
       setShifts(allShifts);
+
 
       // Then try to load from Firestore (authoritative)
       try {
         const [firestoreAssignments, firestoreShifts] = await Promise.all([
-          loadAssignmentsFromFirestore(teamNumber),
-          loadShiftsFromFirestore(teamNumber),
+          loadAssignmentsFromFirestore(),
+          loadShiftsFromFirestore(),
         ]);
-        
+       
         if (firestoreAssignments && Object.keys(firestoreAssignments).length > 0) {
           setAssignments(firestoreAssignments);
         }
@@ -94,39 +79,48 @@ export default function MyAssignmentsTab() {
         console.error("Error loading from Firestore:", error);
       }
 
+
       // Sync with Firebase to check for submitted matches
       setSyncing(true);
-      await syncAssignmentsWithSubmittedMatches(teamNumber);
+      await syncAssignmentsWithSubmittedMatches();
       setSyncing(false);
       setLastSync(new Date());
 
+
       // Reload assignments after sync
-      const syncedAssignments = getAllAssignments(teamNumber);
+      const syncedAssignments = getAllAssignments();
       setAssignments(syncedAssignments);
     };
 
+
     loadAndSyncData();
+
 
     // Set up real-time listeners for Firestore updates
     const unsubscribeAssignments = subscribeToAssignments((updatedAssignments) => {
       setAssignments(updatedAssignments);
-    }, teamNumber);
+    });
+
 
     const unsubscribeShifts = subscribeToShifts((updatedShifts) => {
       setShifts(updatedShifts);
-    }, teamNumber);
+    });
+
 
     const unsubscribeMatches = subscribeToMatches((updatedMatches) => {
       setMatches(updatedMatches);
-    }, teamNumber);
+    });
+
 
     // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = () => {
       loadAndSyncData();
     };
 
+
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("assignmentsUpdated", handleStorageChange);
+
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
@@ -135,22 +129,25 @@ export default function MyAssignmentsTab() {
       if (unsubscribeShifts) unsubscribeShifts();
       if (unsubscribeMatches) unsubscribeMatches();
     };
-  }, [teamNumber, getTeamScouters]);
+  }, []);
+
 
   // Handle manual refresh
   const handleRefresh = async () => {
     setSyncing(true);
-    await syncAssignmentsWithSubmittedMatches(teamNumber);
-    const updatedAssignments = getAllAssignments(teamNumber);
+    await syncAssignmentsWithSubmittedMatches();
+    const updatedAssignments = getAllAssignments();
     setAssignments(updatedAssignments);
     setSyncing(false);
     setLastSync(new Date());
   };
 
+
   // Get assignments for selected scouter
   const scouterAssignments = selectedScouter
     ? assignments[selectedScouter] || []
     : [];
+
 
   // Get completion stats
   const getCompletionStats = () => {
@@ -160,6 +157,7 @@ export default function MyAssignmentsTab() {
     const completed = scouterAssignments.filter((a) => a.completed).length;
     return { completed, total: scouterAssignments.length };
   };
+
 
   // Get scouter's shift info
   const getScouterShift = (scouterName) => {
@@ -171,16 +169,19 @@ export default function MyAssignmentsTab() {
     return null;
   };
 
+
   // Get shift coverage
   const getShiftCoverage = () => {
     if (shifts.length === 0) {
       return { totalShifts: 0, totalMatches: 0, minMatch: 0, maxMatch: 0 };
     }
 
+
     const matchRanges = shifts.map((s) => ({ start: s.startMatch, end: s.endMatch }));
     const minMatch = Math.min(...matchRanges.map((r) => r.start));
     const maxMatch = Math.max(...matchRanges.map((r) => r.end));
     const totalMatches = maxMatch - minMatch + 1;
+
 
     return {
       totalShifts: shifts.length,
@@ -190,16 +191,18 @@ export default function MyAssignmentsTab() {
     };
   };
 
+
   const stats = getCompletionStats();
   const coverage = getShiftCoverage();
   const shift = selectedScouter ? getScouterShift(selectedScouter) : null;
+
 
   return (
     <Box sx={{ p: 3 }}>
       {/* Header with refresh button */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" color="primary">
-          My Assignments {teamNumber && <Chip label={`Team ${teamNumber}`} size="small" />}
+          My Assignments
         </Typography>
         <Button
           variant="outlined"
@@ -212,12 +215,14 @@ export default function MyAssignmentsTab() {
         </Button>
       </Box>
 
+
       {/* Last sync time */}
       {lastSync && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Last synced: {lastSync.toLocaleTimeString()}
         </Typography>
       )}
+
 
       {/* Shift Coverage Info */}
       {shifts.length > 0 && (
@@ -227,6 +232,7 @@ export default function MyAssignmentsTab() {
           matches total)
         </Alert>
       )}
+
 
       <Grid container spacing={3}>
         {/* Left Panel - Scouter List */}
@@ -238,6 +244,7 @@ export default function MyAssignmentsTab() {
           />
         </Grid>
 
+
         {/* Right Panel - Assignment Details */}
         <Grid item xs={12} md={8}>
           {selectedScouter ? (
@@ -248,6 +255,7 @@ export default function MyAssignmentsTab() {
                   {selectedScouter}
                 </Typography>
 
+
                 {/* Shift Info */}
                 {shift && (
                   <Alert severity="info" sx={{ mb: 2 }}>
@@ -255,6 +263,7 @@ export default function MyAssignmentsTab() {
                     {shift.endMatch - shift.startMatch + 1} matches)
                   </Alert>
                 )}
+
 
                 {/* Completion Stats */}
                 <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
@@ -296,6 +305,7 @@ export default function MyAssignmentsTab() {
                   </Card>
                 </Stack>
 
+
                 {/* Current Match Navigation */}
                 <Box
                   sx={{
@@ -314,7 +324,9 @@ export default function MyAssignmentsTab() {
                 </Box>
               </Box>
 
+
               <hr />
+
 
               {/* Assignments Table */}
               {scouterAssignments.length > 0 ? (
@@ -430,3 +442,6 @@ export default function MyAssignmentsTab() {
     </Box>
   );
 }
+
+
+

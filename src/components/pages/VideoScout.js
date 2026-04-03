@@ -21,7 +21,6 @@ import VSAllianceTab from "./videoscout/VSAllianceTab";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import SendIcon from "@mui/icons-material/Send";
-import TeamShiftPanel from "./Assignments/TeamShiftPanel";
 
 const VideoStage = {
   PRE_MATCH: 0,

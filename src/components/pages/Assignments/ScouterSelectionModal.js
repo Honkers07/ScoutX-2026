@@ -21,6 +21,7 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import SelectAllIcon from "@mui/icons-material/SelectAll";
 
+
 export default function ScouterSelectionModal({
   open,
   onClose,
@@ -32,6 +33,7 @@ export default function ScouterSelectionModal({
   const [searchTerm, setSearchTerm] = useState("");
   const [localSelected, setLocalSelected] = useState([]);
 
+
   // Initialize local selected state when modal opens
   useEffect(() => {
     if (open) {
@@ -39,10 +41,12 @@ export default function ScouterSelectionModal({
     }
   }, [open, selectedScouters]);
 
+
   // Filter scouters based on search term
   const filteredScouters = availableScouters.filter((name) =>
     name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   // Handle toggling a single scouter
   const handleToggleScouter = (name) => {
@@ -54,6 +58,7 @@ export default function ScouterSelectionModal({
       }
     });
   };
+
 
   // Handle selecting all filtered scouters
   const handleSelectAll = () => {
@@ -68,16 +73,19 @@ export default function ScouterSelectionModal({
     });
   };
 
+
   // Handle deselecting all filtered scouters
   const handleDeselectAll = () => {
     setLocalSelected((prev) => prev.filter((s) => !filteredScouters.includes(s)));
   };
+
 
   // Handle confirm
   const handleConfirm = () => {
     onConfirm(localSelected);
     onClose();
   };
+
 
   // Calculate shift info
   const calculateShiftInfo = () => {
@@ -89,6 +97,7 @@ export default function ScouterSelectionModal({
     if (shifts === 0 || count < 6) return `1 shift (all ${count} scouters)`;
     return `${shifts} shifts × 6 scouters ≈ ${matchesPerShift} matches per shift`;
   };
+
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -116,6 +125,7 @@ export default function ScouterSelectionModal({
             sx={{ mb: 2 }}
           />
 
+
           <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
             <Button
               size="small"
@@ -134,7 +144,9 @@ export default function ScouterSelectionModal({
             </Button>
           </Box>
 
+
           <Divider sx={{ mb: 2 }} />
+
 
           {/* Current selection summary */}
           <Box sx={{ mb: 2 }}>
@@ -145,6 +157,7 @@ export default function ScouterSelectionModal({
               {calculateShiftInfo()}
             </Typography>
           </Box>
+
 
           {/* Scouter list with checkboxes */}
           <Box sx={{ maxHeight: 300, overflow: "auto" }}>
@@ -170,12 +183,14 @@ export default function ScouterSelectionModal({
             ))}
           </Box>
 
+
           {filteredScouters.length === 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 2 }}>
               No scouters match your search
             </Typography>
           )}
         </Box>
+
 
         {/* Selected scouters chips */}
         {localSelected.length > 0 && (
@@ -214,3 +229,4 @@ export default function ScouterSelectionModal({
     </Dialog>
   );
 }
+

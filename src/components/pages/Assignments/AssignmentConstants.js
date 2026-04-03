@@ -15,7 +15,7 @@ export const DEFAULT_SCOUTER_POOL = [
 export const COLLECTIONS = {
   MATCHES: "matches",
   SCOUTERS: "scouters",
-  SHIFT_ASSIGNMENTS: "shiftAssignments",
+  SHIFT_ASSIGNMENTS: "shifts",
   ASSIGNMENTS: "assignments",
   TEAMS: "teams",
 };
@@ -27,6 +27,7 @@ export const STORAGE_KEYS = {
   SHIFTS: "shifts",
   ASSIGNMENTS: "matchAssignments",
   SCOUTER_POOL: "scouterPool",
+  TBA_API_KEY: "tbaApiKey",
 };
 
 // Blue Alliance API configuration

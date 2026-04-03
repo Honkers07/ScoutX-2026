@@ -1,60 +1,19 @@
-import { STORAGE_KEYS, COLLECTIONS, DEFAULT_SHIFT_SIZE, getTeamStorageKey, DEFAULT_SCOUTER_POOL } from "./AssignmentConstants";
+import { DEFAULT_SCOUTER_POOL, STORAGE_KEYS, COLLECTIONS, DEFAULT_SHIFT_SIZE } from "./AssignmentConstants";
 import firebase from "../../../firebase";
 import { doc, setDoc, getDoc, collection, getDocs, query, where, onSnapshot, writeBatch } from "firebase/firestore";
 
 /**
- * Save global scouter pool to Firestore for cross-page synchronization
+ * Get the default scouter pool
  */
-export async function saveScouterPoolToFirestore(scouters) {
-  try {
-    await setDoc(doc(firebase, COLLECTIONS.SCOUTERS, "globalPool"), {
-      scouters: scouters,
-      updatedAt: Date.now(),
-    }, { merge: true });
-    console.log("Global scouter pool saved to Firestore:", scouters.length, "scouters");
-    return { success: true };
-  } catch (error) {
-    console.error("Error saving scouter pool to Firestore:", error);
-    return { success: false, error: error.message };
-  }
+export function getDefaultScouterList() {
+  return DEFAULT_SCOUTER_POOL;
 }
 
 /**
- * Load global scouter pool from Firestore
+ * Get scouter list from localStorage or default
  */
-export async function loadScouterPoolFromFirestore() {
-  try {
-    const docSnap = await getDoc(doc(firebase, COLLECTIONS.SCOUTERS, "globalPool"));
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      console.log("Loaded global scouter pool from Firestore:", data.scouters?.length || 0, "scouters");
-      return data.scouters || [];
-    }
-    return null;
-  } catch (error) {
-    console.error("Error loading scouter pool from Firestore:", error);
-    return null;
-  }
-}
-
-/**
- * Subscribe to global scouter pool changes in Firestore
- */
-export function subscribeToGlobalScouterPool(callback) {
-  return onSnapshot(doc(firebase, COLLECTIONS.SCOUTERS, "globalPool"), (docSnap) => {
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      callback(data.scouters || []);
-    }
-  });
-}
-
-/**
- * Get scouter list for a team from localStorage, with default pool fallback
- */
-export function getScouterList(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SCOUTER_POOL, teamNumber) : STORAGE_KEYS.SCOUTER_POOL;
-  const saved = localStorage.getItem(key);
+export function getScouterList() {
+  const saved = localStorage.getItem(STORAGE_KEYS.SCOUTER_POOL);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -62,86 +21,21 @@ export function getScouterList(teamNumber = null) {
       console.error("Error parsing scouter pool:", e);
     }
   }
-  // Return default scouter pool as fallback
-  return [...DEFAULT_SCOUTER_POOL];
+  return DEFAULT_SCOUTER_POOL;
 }
 
 /**
- * Initialize default scouter pool in localStorage if not exists
+ * Save scouter pool to localStorage
  */
-export function initializeDefaultScouterPool(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SCOUTER_POOL, teamNumber) : STORAGE_KEYS.SCOUTER_POOL;
-  const saved = localStorage.getItem(key);
-  if (!saved) {
-    localStorage.setItem(key, JSON.stringify(DEFAULT_SCOUTER_POOL));
-  }
+export function saveScouterPool(scouters) {
+  localStorage.setItem(STORAGE_KEYS.SCOUTER_POOL, JSON.stringify(scouters));
 }
 
 /**
- * Remove a scouter from the scouter pool (localStorage)
+ * Get all shifts from localStorage
  */
-export function removeScouterFromPool(scouterName, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SCOUTER_POOL, teamNumber) : STORAGE_KEYS.SCOUTER_POOL;
-  const saved = localStorage.getItem(key);
-  let scouters = [];
-  
-  if (saved) {
-    try {
-      scouters = JSON.parse(saved);
-    } catch (e) {
-      scouters = [...DEFAULT_SCOUTER_POOL];
-    }
-  } else {
-    scouters = [...DEFAULT_SCOUTER_POOL];
-  }
-  
-  // Remove the scouter
-  const updatedScouters = scouters.filter(s => s.toLowerCase() !== scouterName.toLowerCase());
-  localStorage.setItem(key, JSON.stringify(updatedScouters));
-  return updatedScouters;
-}
-
-/**
- * Add a scouter to the scouter pool (localStorage)
- */
-export function addScouterToPool(scouterName, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SCOUTER_POOL, teamNumber) : STORAGE_KEYS.SCOUTER_POOL;
-  const saved = localStorage.getItem(key);
-  let scouters = [];
-  
-  if (saved) {
-    try {
-      scouters = JSON.parse(saved);
-    } catch (e) {
-      scouters = [...DEFAULT_SCOUTER_POOL];
-    }
-  } else {
-    scouters = [...DEFAULT_SCOUTER_POOL];
-  }
-  
-  // Add the scouter if not already present
-  if (!scouters.some(s => s.toLowerCase() === scouterName.toLowerCase())) {
-    scouters.push(scouterName);
-    scouters.sort(); // Keep alphabetically sorted
-  }
-  localStorage.setItem(key, JSON.stringify(scouters));
-  return scouters;
-}
-
-/**
- * Save scouter pool for a team to localStorage
- */
-export function saveScouterPool(scouters, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SCOUTER_POOL, teamNumber) : STORAGE_KEYS.SCOUTER_POOL;
-  localStorage.setItem(key, JSON.stringify(scouters));
-}
-
-/**
- * Get all shifts for a team from localStorage
- */
-export function getShifts(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SHIFTS, teamNumber) : STORAGE_KEYS.SHIFTS;
-  const saved = localStorage.getItem(key);
+export function getShifts() {
+  const saved = localStorage.getItem(STORAGE_KEYS.SHIFTS);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -153,48 +47,39 @@ export function getShifts(teamNumber = null) {
 }
 
 /**
- * Save shifts for a team to localStorage
+ * Save shifts to localStorage
  */
-export function saveShifts(shifts, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.SHIFTS, teamNumber) : STORAGE_KEYS.SHIFTS;
-  localStorage.setItem(key, JSON.stringify(shifts));
+export function saveShifts(shifts) {
+  localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
 }
 
 /**
- * Get all assignments for a team from localStorage
+ * Get all assignments from localStorage
  */
-export function getAllAssignments(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.ASSIGNMENTS, teamNumber) : STORAGE_KEYS.ASSIGNMENTS;
-  console.log("[getAllAssignments] Key:", key);
-  const saved = localStorage.getItem(key);
+export function getAllAssignments() {
+  const saved = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
   if (saved) {
     try {
-      const parsed = JSON.parse(saved);
-      console.log("[getAllAssignments] Found:", Object.keys(parsed).length, "scouters");
-      return parsed;
+      return JSON.parse(saved);
     } catch (e) {
       console.error("Error parsing assignments:", e);
     }
-  } else {
-    console.log("[getAllAssignments] No data in localStorage for key:", key);
   }
   return {};
 }
 
 /**
- * Save assignments for a team to localStorage
+ * Save assignments to localStorage
  */
-export function saveAssignments(assignments, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.ASSIGNMENTS, teamNumber) : STORAGE_KEYS.ASSIGNMENTS;
-  localStorage.setItem(key, JSON.stringify(assignments));
+export function saveAssignments(assignments) {
+  localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
 }
 
 /**
- * Get matches for a team from localStorage
+ * Get matches from localStorage
  */
-export function getMatches(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.MATCHES, teamNumber) : STORAGE_KEYS.MATCHES;
-  const saved = localStorage.getItem(key);
+export function getMatches() {
+  const saved = localStorage.getItem(STORAGE_KEYS.MATCHES);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -206,42 +91,52 @@ export function getMatches(teamNumber = null) {
 }
 
 /**
- * Save matches for a team to localStorage
+ * Save matches to localStorage
  */
-export function saveMatches(matches, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.MATCHES, teamNumber) : STORAGE_KEYS.MATCHES;
-  localStorage.setItem(key, JSON.stringify(matches));
+export function saveMatches(matches) {
+  localStorage.setItem(STORAGE_KEYS.MATCHES, JSON.stringify(matches));
 }
 
 /**
- * Get event code for a team from localStorage
+ * Get event code from localStorage
  */
-export function getEventCode(teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.EVENT_CODE, teamNumber) : STORAGE_KEYS.EVENT_CODE;
-  return localStorage.getItem(key) || "";
+export function getEventCode() {
+  return localStorage.getItem(STORAGE_KEYS.EVENT_CODE) || "";
 }
 
 /**
- * Save event code for a team to localStorage
+ * Save event code to localStorage
  */
-export function saveEventCode(eventCode, teamNumber = null) {
-  const key = teamNumber ? getTeamStorageKey(STORAGE_KEYS.EVENT_CODE, teamNumber) : STORAGE_KEYS.EVENT_CODE;
-  localStorage.setItem(key, eventCode);
+export function saveEventCode(eventCode) {
+  localStorage.setItem(STORAGE_KEYS.EVENT_CODE, eventCode);
+}
+
+/**
+ * Get TBA API key from localStorage
+ */
+export function getTbaApiKey() {
+  return localStorage.getItem(STORAGE_KEYS.TBA_API_KEY) || "";
+}
+
+/**
+ * Save TBA API key to localStorage
+ */
+export function saveTbaApiKey(apiKey) {
+  localStorage.setItem(STORAGE_KEYS.TBA_API_KEY, apiKey);
 }
 
 /**
  * Generate shifts based on scouter pool and match count
- * Flexible version that allows adding multiple scouters per position
  */
 export function generateShifts(scouters, matchCount) {
-  if (scouters.length === 0 || matchCount === 0) {
+  // Always use fixed shift size of 6 scouters per shift
+  const shiftSize = DEFAULT_SHIFT_SIZE;
+  const numberOfShifts = Math.floor(scouters.length / shiftSize);
+  
+  if (numberOfShifts === 0) {
     return [];
   }
-  
-  // Use at least 1 scouter per position (6 positions total: 3 red + 3 blue)
-  const minScoutersNeeded = 6;
-  const numberOfShifts = Math.max(1, Math.floor(scouters.length / minScoutersNeeded));
-  
+
   const matchesPerShift = Math.floor(matchCount / numberOfShifts);
   const extraMatches = matchCount % numberOfShifts;
 
@@ -253,25 +148,17 @@ export function generateShifts(scouters, matchCount) {
     const endMatch = currentMatch + shiftMatchCount - 1;
 
     // Distribute scouters evenly across the shift
-    // Each shift gets a portion of scouters
-    const startScouterIndex = i * minScoutersNeeded;
-    const endScouterIndex = Math.min(startScouterIndex + minScoutersNeeded, scouters.length);
-    const shiftScouters = scouters.slice(startScouterIndex, endScouterIndex);
-    
-    // If we don't have enough scouters, fill remaining spots with empty/placeholder
-    while (shiftScouters.length < minScoutersNeeded) {
-      shiftScouters.push(""); // Empty placeholder
-    }
+    const startScouterIndex = i * shiftSize;
+    const shiftScouters = scouters.slice(startScouterIndex, startScouterIndex + shiftSize);
 
     const scouterPositions = shiftScouters.map((name, index) => {
       const position = index + 1;
       const isRed = position <= 3;
       return {
-        name: name || "(Empty)",
+        name,
         position,
         alliance: isRed ? "Red" : "Blue",
         slot: isRed ? `red${position}` : `blue${position}`,
-        isPlaceholder: !name,
       };
     });
 
@@ -281,7 +168,7 @@ export function generateShifts(scouters, matchCount) {
       endMatch: endMatch,
       matchCount: shiftMatchCount,
       scouterPositions,
-      scouterNames: shiftScouters.filter(n => n), // Only non-empty names
+      scouterNames: shiftScouters,
     });
 
     currentMatch = endMatch + 1;
@@ -291,17 +178,16 @@ export function generateShifts(scouters, matchCount) {
 }
 
 /**
- * Regenerate assignments from shifts for a specific team
+ * Regenerate assignments from shifts
  */
-export function regenerateAssignmentsFromShifts(teamNumber = null) {
-  const shifts = getShifts(teamNumber);
-  const matches = getMatches(teamNumber);
+export function regenerateAssignmentsFromShifts() {
+  const shifts = getShifts();
+  const matches = getMatches();
 
   if (shifts.length === 0 || matches.length === 0) {
-    console.warn("[regenerateAssignmentsFromShifts] No shifts or matches - shifts:", shifts.length, "matches:", matches.length);
+    console.warn("No shifts or matches to generate assignments from");
     return;
   }
-  console.log("[regenerateAssignmentsFromShifts] Generating with shifts:", shifts.length, "matches:", matches.length);
 
   const assignments = {};
 
@@ -351,7 +237,7 @@ export function regenerateAssignmentsFromShifts(teamNumber = null) {
     assignments[scouter].sort((a, b) => a.match - b.match);
   });
 
-  saveAssignments(assignments, teamNumber);
+  saveAssignments(assignments);
   
   // Dispatch event for UI update
   window.dispatchEvent(new Event("assignmentsUpdated"));
@@ -372,8 +258,8 @@ export function generateVerificationCode(name, matchNumber, alliance) {
 /**
  * Get the next pending assignment for a scouter
  */
-export function getNextAssignment(name, teamNumber = null) {
-  const assignments = getAllAssignments(teamNumber);
+export function getNextAssignment(name) {
+  const assignments = getAllAssignments();
   const scouterAssignments = assignments[name];
   
   if (!scouterAssignments || scouterAssignments.length === 0) {
@@ -388,8 +274,8 @@ export function getNextAssignment(name, teamNumber = null) {
 /**
  * Get assignment for a specific match
  */
-export function getAssignmentForScouter(name, matchNumber, teamNumber = null) {
-  const assignments = getAllAssignments(teamNumber);
+export function getAssignmentForScouter(name, matchNumber) {
+  const assignments = getAllAssignments();
   const scouterAssignments = assignments[name];
   
   if (!scouterAssignments) {
@@ -402,8 +288,8 @@ export function getAssignmentForScouter(name, matchNumber, teamNumber = null) {
 /**
  * Mark an assignment as completed
  */
-export function markAssignmentComplete(name, matchNumber, teamNumber = null) {
-  const assignments = getAllAssignments(teamNumber);
+export function markAssignmentComplete(name, matchNumber) {
+  const assignments = getAllAssignments();
   
   if (!assignments[name]) {
     return;
@@ -421,10 +307,10 @@ export function markAssignmentComplete(name, matchNumber, teamNumber = null) {
 }
 
 /**
- * Update a scouter in a shift for a specific team
+ * Update a scouter in a shift
  */
-export async function updateShiftScouter(shiftIndex, positionIndex, newName, teamNumber = null) {
-  const shifts = getShifts(teamNumber);
+export async function updateShiftScouter(shiftIndex, positionIndex, newName) {
+  const shifts = getShifts();
   
   if (!shifts[shiftIndex]) {
     return;
@@ -440,14 +326,14 @@ export async function updateShiftScouter(shiftIndex, positionIndex, newName, tea
   shifts[shiftIndex].scouterNames = shifts[shiftIndex].scouterPositions.map((s) => s.name);
   
   // Save to both localStorage and Firestore
-  await saveShiftsBoth(shifts, teamNumber);
+  await saveShiftsBoth(shifts);
   
   // Regenerate assignments with new shift configuration
-  regenerateAssignmentsFromShifts(teamNumber);
+  regenerateAssignmentsFromShifts();
   
   // Save assignments to Firestore
-  const assignments = getAllAssignments(teamNumber);
-  await saveAssignmentsBoth(assignments, teamNumber);
+  const assignments = getAllAssignments();
+  await saveAssignmentsBoth(assignments);
 }
 
 /**
@@ -491,16 +377,12 @@ export async function importMatchesFromTBA(eventCode, apiKey) {
 }
 
 /**
- * Save scouter pool to Firestore for a specific team
+ * Save scouter pool to Firestore
  */
-export async function saveTeamScouterPoolToFirestore(scouters, teamNumber) {
-  if (!teamNumber) {
-    console.error("Team number required to save scouter pool");
-    return;
-  }
+export async function saveScouterPoolToFirestore(scouters) {
   try {
-    const docRef = doc(firebase, COLLECTIONS.TEAMS, teamNumber.toString());
-    await setDoc(docRef, { scouters: scouters }, { merge: true });
+    const docRef = doc(firebase, COLLECTIONS.SCOUTERS, "pool");
+    await setDoc(docRef, { names: scouters });
   } catch (error) {
     console.error("Error saving scouter pool to Firestore:", error);
     throw error;
@@ -508,22 +390,17 @@ export async function saveTeamScouterPoolToFirestore(scouters, teamNumber) {
 }
 
 /**
- * Load scouter pool from Firestore for a specific team
+ * Load scouter pool from Firestore
  */
-export async function loadTeamScouterPoolFromFirestore(teamNumber) {
-  if (!teamNumber) {
-    console.error("Team number required to load scouter pool");
-    return null;
-  }
+export async function loadScouterPoolFromFirestore() {
   try {
-    const docRef = doc(firebase, COLLECTIONS.TEAMS, teamNumber.toString());
+    const docRef = doc(firebase, COLLECTIONS.SCOUTERS, "pool");
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
       const data = docSnap.data();
-      const scouters = data.scouters || [];
-      saveScouterPool(scouters, teamNumber);
-      return scouters;
+      saveScouterPool(data.names);
+      return data.names;
     }
     return null;
   } catch (error) {
@@ -533,20 +410,18 @@ export async function loadTeamScouterPoolFromFirestore(teamNumber) {
 }
 
 /**
- * Save shifts to Firestore for a specific team
+ * Save shifts to Firestore
  */
-export async function saveShiftsToFirestore(shifts, teamNumber = null) {
+export async function saveShiftsToFirestore(shifts) {
   try {
-    const teamDocId = teamNumber ? `team${teamNumber}` : "default";
     for (const shift of shifts) {
-      const docRef = doc(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS, `${teamDocId}_shift${shift.id}`);
+      const docRef = doc(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS, `shift${shift.id}`);
       await setDoc(docRef, {
         shiftId: shift.id,
         matchStart: shift.startMatch,
         matchEnd: shift.endMatch,
         scouterNames: shift.scouterNames,
         scouterPositions: shift.scouterPositions,
-        teamNumber: teamNumber,
       });
     }
   } catch (error) {
@@ -556,14 +431,11 @@ export async function saveShiftsToFirestore(shifts, teamNumber = null) {
 }
 
 /**
- * Load shifts from Firestore for a specific team
+ * Load shifts from Firestore
  */
-export async function loadShiftsFromFirestore(teamNumber = null) {
+export async function loadShiftsFromFirestore() {
   try {
-    const teamDocId = teamNumber ? `team${teamNumber}` : "default";
-    const querySnapshot = await getDocs(
-      query(collection(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS), where("teamNumber", "==", teamNumber))
-    );
+    const querySnapshot = await getDocs(collection(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS));
     const shifts = [];
     
     querySnapshot.forEach((doc) => {
@@ -579,7 +451,7 @@ export async function loadShiftsFromFirestore(teamNumber = null) {
     });
     
     shifts.sort((a, b) => a.id - b.id);
-    saveShifts(shifts, teamNumber);
+    saveShifts(shifts);
     return shifts;
   } catch (error) {
     console.error("Error loading shifts from Firestore:", error);
@@ -588,19 +460,14 @@ export async function loadShiftsFromFirestore(teamNumber = null) {
 }
 
 /**
- * Save assignments to Firestore for a specific team
+ * Save assignments to Firestore
  */
-export async function saveAssignmentsToFirestore(assignments, teamNumber = null) {
+export async function saveAssignmentsToFirestore(assignments) {
   try {
-    console.log("[saveAssignmentsToFirestore] Saving for team:", teamNumber, "assignments count:", Object.keys(assignments).length);
-    const teamDocId = teamNumber ? `team${teamNumber}` : "default";
     for (const [scouterName, scouterAssignments] of Object.entries(assignments)) {
-      const docId = `${teamDocId}_${scouterName}`;
-      console.log("[saveAssignmentsToFirestore] Saving doc:", docId, "matches:", scouterAssignments?.length);
-      const docRef = doc(firebase, COLLECTIONS.ASSIGNMENTS, docId);
+      const docRef = doc(firebase, COLLECTIONS.ASSIGNMENTS, scouterName);
       await setDoc(docRef, {
         name: scouterName,
-        teamNumber: teamNumber,
         assignments: scouterAssignments,
       });
     }
@@ -611,24 +478,19 @@ export async function saveAssignmentsToFirestore(assignments, teamNumber = null)
 }
 
 /**
- * Load all assignments from Firestore for a specific team
+ * Load all assignments from Firestore
  */
-export async function loadAssignmentsFromFirestore(teamNumber = null) {
+export async function loadAssignmentsFromFirestore() {
   try {
-    console.log("[loadAssignmentsFromFirestore] Loading for team:", teamNumber);
-    const querySnapshot = await getDocs(
-      query(collection(firebase, COLLECTIONS.ASSIGNMENTS), where("teamNumber", "==", teamNumber))
-    );
-    console.log("[loadAssignmentsFromFirestore] Found docs:", querySnapshot.size);
+    const querySnapshot = await getDocs(collection(firebase, COLLECTIONS.ASSIGNMENTS));
     const assignments = {};
     
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      console.log("[loadAssignmentsFromFirestore] Doc:", doc.id, data.name);
       assignments[data.name] = data.assignments;
     });
     
-    saveAssignments(assignments, teamNumber);
+    saveAssignments(assignments);
     return assignments;
   } catch (error) {
     console.error("Error loading assignments from Firestore:", error);
@@ -664,20 +526,11 @@ export async function markAssignmentCompleteInFirestore(name, matchNumber) {
 /**
  * Get all submitted match data from Firestore
  * Returns a map of "team_match" -> {name, match, team, timestamp}
- * @param {string|null} teamNumber - Optional team number to filter results
  */
-export async function getSubmittedMatchesFromFirestore(teamNumber = null) {
+export async function getSubmittedMatchesFromFirestore() {
   try {
-    console.log("Fetching from TimerScoutData collection..." + (teamNumber ? ` for team ${teamNumber}` : ""));
-    
-    let querySnapshot;
-    if (teamNumber) {
-      // Filter by team number using query
-      const q = query(collection(firebase, "timerScoutData"), where("team", "==", teamNumber));
-      querySnapshot = await getDocs(q);
-    } else {
-      querySnapshot = await getDocs(collection(firebase, "timerScoutData"));
-    }
+    console.log("Fetching from TimerScoutData collection...");
+    const querySnapshot = await getDocs(collection(firebase, "timerScoutData"));
     console.log("TimerScoutData query result:", querySnapshot.size, "documents found");
     
     const submittedMatches = {};
@@ -709,9 +562,9 @@ export async function getSubmittedMatchesFromFirestore(teamNumber = null) {
  * Sync assignment completion status with Firebase match submissions
  * This checks if matches have actually been submitted and updates assignments
  */
-export async function syncAssignmentsWithSubmittedMatches(teamNumber = null) {
-  const submittedMatches = await getSubmittedMatchesFromFirestore(teamNumber);
-  const assignments = getAllAssignments(teamNumber);
+export async function syncAssignmentsWithSubmittedMatches() {
+  const submittedMatches = await getSubmittedMatchesFromFirestore();
+  const assignments = getAllAssignments();
   let updated = false;
   
   // Check each scouter's assignments
@@ -735,7 +588,7 @@ export async function syncAssignmentsWithSubmittedMatches(teamNumber = null) {
   }
   
   if (updated) {
-    saveAssignments(assignments, teamNumber);
+    saveAssignments(assignments);
   }
   
   return submittedMatches;
@@ -767,22 +620,16 @@ let matchesUnsubscribe = null;
  * Set up real-time listener for shifts from Firestore
  * Returns unsubscribe function
  */
-export function subscribeToShifts(onUpdate, teamNumber = null) {
+export function subscribeToShifts(onUpdate) {
   try {
     const collectionRef = collection(firebase, COLLECTIONS.SHIFT_ASSIGNMENTS);
-    
-    // Build query - filter by team if specified
-    let q = collectionRef;
-    if (teamNumber) {
-      q = query(collectionRef, where("teamNumber", "==", teamNumber));
-    }
     
     // Unsubscribe from previous listener if exists
     if (shiftsUnsubscribe) {
       shiftsUnsubscribe();
     }
     
-    shiftsUnsubscribe = onSnapshot(q, (snapshot) => {
+    shiftsUnsubscribe = onSnapshot(collectionRef, (snapshot) => {
       const shifts = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -797,7 +644,7 @@ export function subscribeToShifts(onUpdate, teamNumber = null) {
       });
       
       shifts.sort((a, b) => a.id - b.id);
-      saveShifts(shifts, teamNumber);
+      saveShifts(shifts);
       onUpdate(shifts);
     }, (error) => {
       console.error("Error listening to shifts:", error);
@@ -814,29 +661,23 @@ export function subscribeToShifts(onUpdate, teamNumber = null) {
  * Set up real-time listener for assignments from Firestore
  * Returns unsubscribe function
  */
-export function subscribeToAssignments(onUpdate, teamNumber = null) {
+export function subscribeToAssignments(onUpdate) {
   try {
     const collectionRef = collection(firebase, COLLECTIONS.ASSIGNMENTS);
-    
-    // Build query - filter by team if specified
-    let q = collectionRef;
-    if (teamNumber) {
-      q = query(collectionRef, where("teamNumber", "==", teamNumber));
-    }
     
     // Unsubscribe from previous listener if exists
     if (assignmentsUnsubscribe) {
       assignmentsUnsubscribe();
     }
     
-    assignmentsUnsubscribe = onSnapshot(q, (snapshot) => {
+    assignmentsUnsubscribe = onSnapshot(collectionRef, (snapshot) => {
       const assignments = {};
       snapshot.forEach((doc) => {
         const data = doc.data();
         assignments[data.name] = data.assignments;
       });
       
-      saveAssignments(assignments, teamNumber);
+      saveAssignments(assignments);
       onUpdate(assignments);
     }, (error) => {
       console.error("Error listening to assignments:", error);
@@ -853,35 +694,27 @@ export function subscribeToAssignments(onUpdate, teamNumber = null) {
  * Set up real-time listener for matches from Firestore
  * Returns unsubscribe function
  */
-export function subscribeToMatches(onUpdate, teamNumber = null) {
+export function subscribeToMatches(onUpdate) {
   try {
-    const collectionRef = collection(firebase, COLLECTIONS.MATCHES);
-    
-    // Build query - filter by team if specified
-    let q = collectionRef;
-    if (teamNumber) {
-      q = query(collectionRef, where("teamNumber", "==", teamNumber));
-    }
+    const docRef = doc(firebase, COLLECTIONS.MATCHES, "schedule");
     
     // Unsubscribe from previous listener if exists
     if (matchesUnsubscribe) {
       matchesUnsubscribe();
     }
     
-    matchesUnsubscribe = onSnapshot(q, (snapshot) => {
-      const matches = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        matches.push({
-          matchNumber: data.matchNumber,
-          redTeams: data.redTeams,
-          blueTeams: data.blueTeams,
-        });
-      });
-      
-      matches.sort((a, b) => a.matchNumber - b.matchNumber);
-      saveMatches(matches, teamNumber);
-      onUpdate(matches);
+    matchesUnsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const matches = data.matches || [];
+        
+        matches.sort((a, b) => a.matchNumber - b.matchNumber);
+        saveMatches(matches);
+        onUpdate(matches);
+      } else {
+        saveMatches([]);
+        onUpdate([]);
+      }
     }, (error) => {
       console.error("Error listening to matches:", error);
     });
@@ -912,15 +745,176 @@ export function cleanupAllListeners() {
 }
 
 /**
+ * Rebalance all matches across all active shifts after shift changes
+ * Maintains 100% match coverage at all times with fair distribution
+ * @param {string} action - 'add' or 'delete' for logging
+ * @returns {Promise<boolean>} Success status
+ */
+export async function rebalanceAssignmentsAfterShiftChange(action = "unknown") {
+  console.log(`[rebalanceAssignments] Rebalancing triggered by ${action}`);
+
+  // Get current state
+  const shifts = getShifts();
+  const scouters = getScouterList();
+  const matches = getMatches();
+
+  const numShifts = shifts.length;
+  const numScouters = scouters.length;
+  const totalMatches = matches.length;
+
+  console.log(`[rebalanceAssignments] Current state: ${numShifts} shifts, ${numScouters} scouters, ${totalMatches} matches`);
+
+  // Edge cases
+  if (numShifts === 0) {
+    console.warn("[rebalanceAssignments] No shifts exist, cannot rebalance");
+    return false;
+  }
+
+  if (numScouters === 0) {
+    console.warn("[rebalanceAssignments] No scouters available, cannot assign matches");
+    return false;
+  }
+
+  if (totalMatches === 0) {
+    console.log("[rebalanceAssignments] No matches to assign, rebalance complete");
+    return true;
+  }
+
+  // ------------------------------
+  // FAIR DISTRIBUTION ALGORITHM
+  // ------------------------------
+  //
+  // 1. Calculate target matches per shift = ceil(totalMatches / numShifts)
+  // 2. Assign match ranges to each shift in sequential order
+  // 3. Every match gets assigned to exactly one shift
+  // 4. Shifts are ordered by their index to keep consistent ordering
+  // 5. Overflow matches go to last shift to ensure 100% coverage
+  //
+  // Example:
+  // 74 matches / 5 shifts = 15 matches per shift, last shift gets 14
+  // 74 matches / 3 shifts = 25, 25, 24 matches
+
+  const matchesPerShift = Math.ceil(totalMatches / numShifts);
+  console.log(`[rebalanceAssignments] Targeting ${matchesPerShift} matches per shift`);
+
+  // Update each shift with new match range
+  const updatedShifts = shifts.map((shift, index) => {
+    const startMatch = (index * matchesPerShift) + 1;
+    let endMatch = Math.min(((index + 1) * matchesPerShift), totalMatches);
+
+    // Last shift gets all remaining matches to ensure full coverage
+    if (index === numShifts - 1) {
+      endMatch = totalMatches;
+    }
+
+    return {
+      ...shift,
+      startMatch,
+      endMatch,
+      matchCount: endMatch - startMatch + 1,
+      lastRebalanced: new Date().toISOString(),
+    };
+  });
+
+  // Save updated shifts to both storage locations
+  await saveShiftsBoth(updatedShifts);
+
+  // Regenerate all assignments from updated shift definitions
+  regenerateAssignmentsFromShifts();
+  const assignments = getAllAssignments();
+  await saveAssignmentsBoth(assignments);
+
+  const finalShiftCount = updatedShifts.length;
+  console.log(`✅ [rebalanceAssignments] Successfully rebalanced ${totalMatches} matches across ${finalShiftCount} shifts for ${numScouters} scouters`);
+  
+  updatedShifts.forEach((shift, i) => {
+    console.log(`   📊 Shift ${i+1}: Matches ${shift.startMatch}-${shift.endMatch} (${shift.matchCount} matches)`);
+  });
+
+  return true;
+}
+
+/**
+ * Add a new shift and automatically rebalance all matches
+ * @param {string} customName - Optional custom name for the shift
+ * @returns {Promise<object>} The newly created shift
+ */
+export async function addNewShift(customName = null) {
+  const currentShifts = getShifts();
+  const nextShiftNumber = currentShifts.length + 1;
+
+  const newShift = {
+    id: `shift_${Date.now()}`,
+    name: customName || `Shift ${nextShiftNumber}`,
+    order: nextShiftNumber,
+    startMatch: 1,
+    endMatch: 1,
+    matchCount: 0,
+    scouterPositions: [
+      { position: 1, alliance: "Red", name: "" },
+      { position: 2, alliance: "Red", name: "" },
+      { position: 3, alliance: "Red", name: "" },
+      { position: 4, alliance: "Blue", name: "" },
+      { position: 5, alliance: "Blue", name: "" },
+      { position: 6, alliance: "Blue", name: "" },
+    ],
+    createdAt: new Date().toISOString(),
+  };
+
+  const updatedShifts = [...currentShifts, newShift];
+  await saveShiftsBoth(updatedShifts);
+
+  await rebalanceAssignmentsAfterShiftChange("add");
+
+  return newShift;
+}
+
+/**
+ * Delete a shift by index and rebalance all matches across remaining shifts
+ * @param {number} shiftIndex - Index of shift to delete
+ * @returns {Promise<boolean>} Success status
+ */
+export async function deleteShift(shiftIndex) {
+  const currentShifts = getShifts();
+
+  if (currentShifts.length <= 1) {
+    console.warn("[deleteShift] Cannot delete last remaining shift");
+    return false;
+  }
+
+  if (shiftIndex < 0 || shiftIndex >= currentShifts.length) {
+    console.error("[deleteShift] Invalid shift index");
+    return false;
+  }
+
+  const shiftToDelete = currentShifts[shiftIndex];
+  console.log(`[deleteShift] Removing shift: ${shiftToDelete.name}`);
+
+  // Remove the shift
+  const updatedShifts = currentShifts.filter((_, i) => i !== shiftIndex);
+  
+  // Reorder remaining shifts
+  updatedShifts.forEach((shift, index) => {
+    shift.order = index + 1;
+  });
+
+  await saveShiftsBoth(updatedShifts);
+
+  await rebalanceAssignmentsAfterShiftChange("delete");
+
+  return true;
+}
+
+/**
  * Save shifts to both localStorage and Firestore
  */
-export async function saveShiftsBoth(shifts, teamNumber = null) {
+export async function saveShiftsBoth(shifts) {
   // Save to localStorage
-  saveShifts(shifts, teamNumber);
+  saveShifts(shifts);
   
   // Save to Firestore
   try {
-    await saveShiftsToFirestore(shifts, teamNumber);
+    await saveShiftsToFirestore(shifts);
   } catch (error) {
     console.error("Error saving shifts to Firestore:", error);
   }
@@ -929,13 +923,13 @@ export async function saveShiftsBoth(shifts, teamNumber = null) {
 /**
  * Save assignments to both localStorage and Firestore
  */
-export async function saveAssignmentsBoth(assignments, teamNumber = null) {
+export async function saveAssignmentsBoth(assignments) {
   // Save to localStorage
-  saveAssignments(assignments, teamNumber);
+  saveAssignments(assignments);
   
   // Save to Firestore
   try {
-    await saveAssignmentsToFirestore(assignments, teamNumber);
+    await saveAssignmentsToFirestore(assignments);
   } catch (error) {
     console.error("Error saving assignments to Firestore:", error);
   }
@@ -944,18 +938,16 @@ export async function saveAssignmentsBoth(assignments, teamNumber = null) {
 /**
  * Save matches to both localStorage and Firestore
  */
-export async function saveMatchesBoth(matches, eventCode, teamNumber = null) {
+export async function saveMatchesBoth(matches, eventCode) {
   // Save to localStorage
-  saveMatches(matches, teamNumber);
-  saveEventCode(eventCode, teamNumber);
+  saveMatches(matches);
+  saveEventCode(eventCode);
   
   // Save to Firestore
   try {
-    const teamDocId = teamNumber ? `team${teamNumber}` : "default";
-    const docRef = doc(firebase, COLLECTIONS.MATCHES, `${teamDocId}_schedule`);
+    const docRef = doc(firebase, COLLECTIONS.MATCHES, "schedule");
     await setDoc(docRef, {
       eventCode,
-      teamNumber: teamNumber,
       matches,
       lastUpdated: new Date().toISOString(),
     });
@@ -963,3 +955,23 @@ export async function saveMatchesBoth(matches, eventCode, teamNumber = null) {
     console.error("Error saving matches to Firestore:", error);
   }
 }
+
+/**
+ * Load matches from Firestore
+ */
+export async function loadMatchesFromFirestore() {
+  try {
+    const docRef = doc(firebase, COLLECTIONS.MATCHES, "schedule");
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.matches || [];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading matches from Firestore:", error);
+    return [];
+  }
+}
+

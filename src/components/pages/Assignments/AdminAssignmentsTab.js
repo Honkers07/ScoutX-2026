@@ -11,15 +11,11 @@ import {
   CardContent,
   Stack,
   CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Modal,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EventIcon from "@mui/icons-material/Event";
-import DeleteIcon from "@mui/icons-material/Delete";
 import ShiftPanel from "./ShiftPanel";
 import ScouterList from "./ScouterList";
 import ScouterSelectionModal from "./ScouterSelectionModal";
@@ -28,6 +24,9 @@ import {
   getShifts,
   getMatches,
   getEventCode,
+  getTbaApiKey,
+  saveTbaApiKey,
+  loadMatchesFromFirestore,
   getAllAssignments,
   generateShifts,
   regenerateAssignmentsFromShifts,
@@ -36,32 +35,24 @@ import {
   saveShifts,
   saveShiftsBoth,
   saveAssignmentsBoth,
+  saveMatches,
   saveMatchesBoth,
-  saveScouterPool,
-  initializeDefaultScouterPool,
-  removeScouterFromPool,
-  addScouterToPool,
   subscribeToShifts,
   subscribeToAssignments,
   subscribeToMatches,
   cleanupAllListeners,
   loadShiftsFromFirestore,
   loadAssignmentsFromFirestore,
-  saveScouterPoolToFirestore,
-  loadScouterPoolFromFirestore,
-  subscribeToGlobalScouterPool,
+  addNewShift,
+  deleteShift,
+  rebalanceAssignmentsAfterShiftChange,
 } from "./AssignmentHelpers";
-import { doc, onSnapshot, collection } from "firebase/firestore";
 import { ADMIN_PASSWORD } from "./AssignmentConstants";
-import { useAuth } from "../../AuthContext";
-import firebase from "../../../firebase";
+
 
 export default function AdminAssignmentsTab() {
-  const { user, getAllTeams, getTeamScouters, removeScouter, addScouter } = useAuth();
-  const [teamNumber, setTeamNumber] = useState(undefined);
-  const [availableTeams, setAvailableTeams] = useState([]);
-  const [eventCode, setEventCode] = useState(() => getEventCode(teamNumber));
-  const [tbaApiKey, setTbaApiKey] = useState(() => localStorage.getItem("tbaApiKey") || "");
+  const [eventCode, setEventCode] = useState(getEventCode());
+  const [tbaApiKey, setTbaApiKey] = useState(getTbaApiKey());
   const [matches, setMatches] = useState([]);
   const [scouterList, setScouterList] = useState([]);
   const [shifts, setShifts] = useState([]);
@@ -71,151 +62,102 @@ export default function AdminAssignmentsTab() {
   const [editingEnabled, setEditingEnabled] = useState(false);
   const [selectionModalOpen, setSelectionModalOpen] = useState(false);
   const [selectedScoutersForShift, setSelectedScoutersForShift] = useState([]);
+  const [addShiftModalOpen, setAddShiftModalOpen] = useState(false);
+  const [deleteShiftConfirmIndex, setDeleteShiftConfirmIndex] = useState(null);
+  const [newShiftName, setNewShiftName] = useState("");
+
 
   // Handle opening selection modal with all scouters pre-selected
   const handleOpenSelectionModal = () => {
-    // Ensure we have scouters loaded (use already loaded list from Firestore)
-    if (scouterList.length > 0) {
-      setSelectedScoutersForShift([...scouterList]);
-      setSelectionModalOpen(true);
-    } else {
-      // Fallback to localStorage if no team selected
-      const scouts = getScouterList(teamNumber);
-      setScouterList(scouts);
-      setSelectedScoutersForShift([...scouts]);
-      setSelectionModalOpen(true);
-    }
+    // Ensure we have scouters loaded
+    const scouts = scouterList.length > 0 ? scouterList : getScouterList();
+    setScouterList(scouts); // Update state if needed
+    setSelectedScoutersForShift([...scouts]);
+    setSelectionModalOpen(true);
   };
 
-  // Auto-select team when only one team is available
-  useEffect(() => {
-    if (availableTeams.length === 1 && !teamNumber) {
-      setTeamNumber(availableTeams[0].teamNumber);
-    }
-  }, [availableTeams, teamNumber]);
 
   // Load initial data from Firestore and set up real-time listeners
   useEffect(() => {
     const loadData = async () => {
-      if (!teamNumber) {
-        // Load available teams if no team selected
-        const teams = await getAllTeams();
-        setAvailableTeams(teams);
-        
-        // Auto-select if only one team exists
-        if (teams.length === 1) {
-          setTeamNumber(teams[0].teamNumber);
-          return;
-        }
-        
-        // No team selected yet - show message to select one
-        return;
-      }
-
       // First load from localStorage (fast)
-      const localMatches = getMatches(teamNumber);
+      const localMatches = getMatches();
       setMatches(localMatches);
 
-      // Get scouter list from Firestore for this team - this is the authoritative source
-      const teamScouters = await getTeamScouters(teamNumber);
-      setScouterList(teamScouters);
-      
-      // Also save to localStorage for other components that might need it
-      if (teamScouters.length > 0) {
-        saveScouterPool(teamScouters, teamNumber);
-      }
 
-      const localShifts = getShifts(teamNumber);
+      const localScouters = getScouterList();
+      setScouterList(localScouters);
+
+
+      const localShifts = getShifts();
       setShifts(localShifts);
+
 
       // Then try to load from Firestore (authoritative)
       try {
-        const [firestoreShifts, firestoreAssignments] = await Promise.all([
-          loadShiftsFromFirestore(teamNumber),
-          loadAssignmentsFromFirestore(teamNumber),
+        const [firestoreShifts, firestoreAssignments, firestoreMatches] = await Promise.all([
+          loadShiftsFromFirestore(),
+          loadAssignmentsFromFirestore(),
+          loadMatchesFromFirestore(),
         ]);
-        
+       
         if (firestoreShifts && firestoreShifts.length > 0) {
           setShifts(firestoreShifts);
+        }
+
+        if (firestoreMatches && firestoreMatches.length > 0) {
+          setMatches(firestoreMatches);
         }
       } catch (error) {
         console.error("Error loading from Firestore:", error);
       }
     };
 
+
     loadData();
 
-    // Set up real-time listeners for shifts and assignments
+
+    // Set up real-time listeners
     const unsubscribeShifts = subscribeToShifts((updatedShifts) => {
       setShifts(updatedShifts);
-    }, teamNumber);
+    });
+
 
     const unsubscribeAssignments = subscribeToAssignments(() => {
       // Trigger storage event for other components
       window.dispatchEvent(new Event("assignmentsUpdated"));
     });
 
+    const unsubscribeMatches = subscribeToMatches((matches) => {
+      setMatches(matches);
+      saveMatches(matches);
+    });
+
+
     // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = () => {
-      const loadedMatches = getMatches(teamNumber);
+      const loadedMatches = getMatches();
       setMatches(loadedMatches);
-      const loadedScouters = getScouterList(teamNumber);
+      const loadedScouters = getScouterList();
       setScouterList(loadedScouters);
-      const loadedShifts = getShifts(teamNumber);
+      const loadedShifts = getShifts();
       setShifts(loadedShifts);
     };
+
 
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("assignmentsUpdated", handleStorageChange);
 
-    // Real-time listener for teams (for team list)
-    const unsubscribeTeams = onSnapshot(collection(firebase, "teams"), (snapshot) => {
-      const teams = [];
-      snapshot.forEach((doc) => {
-        teams.push({ id: doc.id, ...doc.data() });
-      });
-      setAvailableTeams(teams.sort((a, b) => a.teamNumber - b.teamNumber));
-    });
-
-    // Real-time listener for specific team's scouters - THIS IS KEY for real-time updates
-    const unsubscribeTeamScouters = teamNumber ? onSnapshot(doc(firebase, "teams", teamNumber.toString()), (docSnap) => {
-      if (docSnap.exists()) {
-        const teamData = docSnap.data();
-        const firestoreScouters = teamData.scouters || [];
-        setScouterList(firestoreScouters);
-        // Also sync to localStorage
-        saveScouterPool(firestoreScouters, teamNumber);
-      } else {
-        setScouterList([]);
-      }
-    }) : null;
-
-    // Real-time listener for global scouter pool (when no team selected)
-    const unsubscribeGlobalScouters = !teamNumber ? subscribeToGlobalScouterPool((updatedScouters) => {
-      if (updatedScouters && updatedScouters.length > 0) {
-        setScouterList(updatedScouters);
-        saveScouterPool(updatedScouters, null);
-      }
-    }) : null;
-
-    // Listen for scouter pool updates from other components
-    const handleScouterPoolUpdate = () => {
-      const loadedScouters = getScouterList(null);
-      setScouterList(loadedScouters);
-    };
-    window.addEventListener("scouterPoolUpdated", handleScouterPoolUpdate);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("assignmentsUpdated", handleStorageChange);
-      window.removeEventListener("scouterPoolUpdated", handleScouterPoolUpdate);
       if (unsubscribeShifts) unsubscribeShifts();
       if (unsubscribeAssignments) unsubscribeAssignments();
-      if (unsubscribeTeams) unsubscribeTeams();
-      if (unsubscribeTeamScouters) unsubscribeTeamScouters();
-      if (unsubscribeGlobalScouters) unsubscribeGlobalScouters();
+      if (unsubscribeMatches) unsubscribeMatches();
     };
-  }, [teamNumber, getAllTeams, getTeamScouters]);
+  }, []);
+
 
   // Handle import matches from TBA
   const handleImportMatches = async () => {
@@ -224,22 +166,28 @@ export default function AdminAssignmentsTab() {
       return;
     }
 
+
     if (!tbaApiKey) {
       setError("Please enter your TBA API key");
       return;
     }
 
+
     setLoading(true);
     setError("");
     setSuccess("");
 
+
     try {
       const importedMatches = await importMatchesFromTBA(eventCode, tbaApiKey);
       setMatches(importedMatches);
-      
+     
       // Save to both localStorage and Firestore
       await saveMatchesBoth(importedMatches, eventCode);
       
+      // Save TBA API key for future use
+      saveTbaApiKey(tbaApiKey);
+     
       setSuccess(`Successfully imported ${importedMatches.length} matches`);
     } catch (err) {
       setError(`Failed to import matches: ${err.message}`);
@@ -248,37 +196,40 @@ export default function AdminAssignmentsTab() {
     }
   };
 
+
   // Handle auto-generate shifts
   const handleGenerateShifts = async (scoutersToUse = null) => {
     const scouts = scoutersToUse || scouterList;
-    
+   
     if (matches.length === 0) {
       setError("Please import matches first");
       return;
     }
+
 
     if (scouts.length === 0) {
       setError("No scouters available");
       return;
     }
 
+
     setError("");
     setLoading(true);
-    
+   
     try {
       const generatedShifts = generateShifts(scouts, matches.length);
       setShifts(generatedShifts);
-      
+     
       // Save to both localStorage and Firestore
-      await saveShiftsBoth(generatedShifts, teamNumber);
-      
+      await saveShiftsBoth(generatedShifts);
+     
       // Regenerate assignments
-      regenerateAssignmentsFromShifts(teamNumber);
-      
+      regenerateAssignmentsFromShifts();
+     
       // Also save assignments to Firestore
-      const assignments = getAllAssignments(teamNumber);
-      await saveAssignmentsBoth(assignments, teamNumber);
-      
+      const assignments = getAllAssignments();
+      await saveAssignmentsBoth(assignments);
+     
       setSuccess(`Generated ${generatedShifts.length} shifts with ${scouts.length} scouters`);
     } catch (error) {
       console.error("Error generating shifts:", error);
@@ -288,111 +239,68 @@ export default function AdminAssignmentsTab() {
     }
   };
 
-  // Handle shift scouter update
-  const handleUpdateShiftScouter = async (shiftIndex, positionIndex, newName) => {
-    await updateShiftScouter(shiftIndex, positionIndex, newName, teamNumber);
-    // Reload shifts after update
-    const updatedShifts = getShifts(teamNumber);
-    setShifts(updatedShifts);
-  };
+// Handle shift scouter update
+const handleUpdateShiftScouter = async (shiftIndex, positionIndex, newName) => {
+  await updateShiftScouter(shiftIndex, positionIndex, newName);
+  // Reload shifts after update
+  const updatedShifts = getShifts();
+  setShifts(updatedShifts);
+};
 
-  // Handle remove scouter from team
-  const handleRemoveScouter = async (scouterName) => {
-    if (!window.confirm(`Are you sure you want to remove "${scouterName}" from ${teamNumber ? `Team ${teamNumber}` : "the default pool"}?`)) {
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      if (teamNumber) {
-        // Remove from Firebase team
-        const result = await removeScouter(scouterName, teamNumber);
-        if (result.success) {
-          setSuccess(`Removed ${scouterName} from the team`);
-          // Reload scouter list
-          const updatedScouters = await getTeamScouters(teamNumber);
-          setScouterList(updatedScouters);
-        } else {
-          setError(result.error || "Failed to remove scouter");
-        }
-      } else {
-        // Remove from global/default pool - now syncs to Firestore
-        removeScouterFromPool(scouterName, null);
-        
-        // Also save to Firestore for global sync
-        const updatedScouters = getScouterList(null);
-        await saveScouterPoolToFirestore(updatedScouters);
-        
-        setSuccess(`Removed ${scouterName} from the default pool`);
-        setScouterList(updatedScouters);
-        
-        // Notify other components
-        window.dispatchEvent(new Event("scouterPoolUpdated"));
-      }
-    } catch (error) {
-      console.error("Error removing scouter:", error);
-      setError("Failed to remove scouter");
-    } finally {
-      setLoading(false);
-    }
-  };
+// Add new shift handler
+const handleAddShift = async () => {
+  setLoading(true);
+  try {
+    const newShift = await addNewShift(newShiftName || null);
+    setSuccess(`Added new shift: ${newShift.name}`);
+    setAddShiftModalOpen(false);
+    setNewShiftName("");
+  } catch (error) {
+    console.error("Error adding shift:", error);
+    setError("Failed to add shift");
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // Handle add scouter to team
-  const handleAddScouter = async (scouterName) => {
-    if (!scouterName.trim()) {
-      setError("Scouter name cannot be empty");
-      return;
+// Delete shift handler
+const handleDeleteShift = async () => {
+  if (deleteShiftConfirmIndex === null) return;
+  
+  setLoading(true);
+  try {
+    const success = await deleteShift(deleteShiftConfirmIndex);
+    if (success) {
+      setSuccess("Shift deleted and matches rebalanced successfully");
+    } else {
+      setError("Cannot delete last remaining shift");
     }
-    
-    setLoading(true);
-    try {
-      if (teamNumber) {
-        // Add to Firebase team
-        const result = await addScouter(scouterName.trim(), teamNumber);
-        if (result.success) {
-          setSuccess(`Added ${scouterName} to Team ${teamNumber}`);
-          // Reload scouter list
-          const updatedScouters = await getTeamScouters(teamNumber);
-          setScouterList(updatedScouters);
-        } else {
-          setError(result.error || "Failed to add scouter");
-        }
-      } else {
-        // Add to global/default pool - now syncs to Firestore
-        addScouterToPool(scouterName.trim(), null);
-        
-        // Also save to Firestore for global sync
-        const updatedScouters = getScouterList(null);
-        await saveScouterPoolToFirestore(updatedScouters);
-        
-        setSuccess(`Added ${scouterName} to default pool`);
-        setScouterList(updatedScouters);
-        
-        // Notify other components
-        window.dispatchEvent(new Event("scouterPoolUpdated"));
-      }
-    } catch (error) {
-      console.error("Error adding scouter:", error);
-      setError("Failed to add scouter");
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error("Error deleting shift:", error);
+    setError("Failed to delete shift");
+  } finally {
+    setDeleteShiftConfirmIndex(null);
+    setLoading(false);
+  }
+};
+
+
 
   // Handle save changes
   const handleSaveChanges = async () => {
-    regenerateAssignmentsFromShifts(teamNumber);
-    
+    regenerateAssignmentsFromShifts();
+   
     // Save to Firestore
     try {
-      const assignments = getAllAssignments(teamNumber);
-      await saveAssignmentsBoth(assignments, teamNumber);
+      const assignments = getAllAssignments();
+      await saveAssignmentsBoth(assignments);
     } catch (error) {
       console.error("Error saving to Firestore:", error);
     }
-    
+   
     setSuccess("Shift changes saved! Assignments have been regenerated.");
   };
+
 
   // Calculate coverage stats
   const getCoverageStats = () => {
@@ -400,10 +308,12 @@ export default function AdminAssignmentsTab() {
       return { totalShifts: 0, totalMatches: 0, minMatch: 0, maxMatch: 0 };
     }
 
+
     const matchRanges = shifts.map((s) => ({ start: s.startMatch, end: s.endMatch }));
     const minMatch = Math.min(...matchRanges.map((r) => r.start));
     const maxMatch = Math.max(...matchRanges.map((r) => r.end));
     const totalMatches = maxMatch - minMatch + 1;
+
 
     return {
       totalShifts: shifts.length,
@@ -413,40 +323,12 @@ export default function AdminAssignmentsTab() {
     };
   };
 
+
   const coverage = getCoverageStats();
+
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Team Selector - Required */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Team Selection
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
-            <FormControl fullWidth>
-              <InputLabel>Select Team</InputLabel>
-              <Select
-                value={teamNumber ?? ""}
-                label="Select Team"
-                onChange={(e) => setTeamNumber(e.target.value ? parseInt(e.target.value) : undefined)}
-              >
-                {availableTeams.map((team) => (
-                  <MenuItem key={team.id} value={team.teamNumber}>
-                    Team {team.teamNumber} ({team.scouters?.length || 0} scouters)
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Typography variant="body2" color="text.secondary">
-              {teamNumber ? `${scouterList.length} scouters in team pool` : 'Select a team to manage assignments'}
-            </Typography>
-          </Grid>
-        </Grid>
-      </Paper>
-
       {/* Event & Schedule Controls */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -454,17 +336,20 @@ export default function AdminAssignmentsTab() {
           Event & Schedule Controls
         </Typography>
 
+
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
             {error}
           </Alert>
         )}
 
+
         {success && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
             {success}
           </Alert>
         )}
+
 
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={4}>
@@ -483,11 +368,7 @@ export default function AdminAssignmentsTab() {
               label="TBA API Key"
               type="password"
               value={tbaApiKey}
-              onChange={(e) => {
-                const value = e.target.value;
-                setTbaApiKey(value);
-                localStorage.setItem("tbaApiKey", value);
-              }}
+              onChange={(e) => setTbaApiKey(e.target.value)}
               placeholder="Your TBA auth key"
               helperText="Get from your TBA account"
             />
@@ -505,6 +386,7 @@ export default function AdminAssignmentsTab() {
           </Grid>
         </Grid>
 
+
         <Box sx={{ mt: 2 }}>
           <Button
             variant="contained"
@@ -517,6 +399,7 @@ export default function AdminAssignmentsTab() {
           </Button>
         </Box>
 
+
         {/* Coverage Stats */}
         {shifts.length > 0 && (
           <Alert severity="info" sx={{ mt: 2 }}>
@@ -526,6 +409,7 @@ export default function AdminAssignmentsTab() {
           </Alert>
         )}
       </Paper>
+
 
       {/* Main Content Area */}
       <Grid container spacing={3}>
@@ -538,10 +422,12 @@ export default function AdminAssignmentsTab() {
               onSaveChanges={handleSaveChanges}
               editingEnabled={editingEnabled}
               onToggleEdit={() => setEditingEnabled(!editingEnabled)}
-              scouterList={scouterList}
+              onDeleteShift={(index) => setDeleteShiftConfirmIndex(index)}
+              onAddShift={() => setAddShiftModalOpen(true)}
             />
           </Grid>
         )}
+
 
         {/* Scouter List */}
         <Grid item xs={12} md={shifts.length > 0 ? 3 : 4}>
@@ -549,12 +435,9 @@ export default function AdminAssignmentsTab() {
             scouters={scouterList}
             selectedScouter={null}
             onSelectScouter={() => {}}
-            onRemoveScouter={handleRemoveScouter}
-            onAddScouter={handleAddScouter}
-            showRemoveButton={true}
-            title="Scouter Pool"
           />
         </Grid>
+
 
         {/* Match Assignment Panel */}
         <Grid item xs={12} md={shifts.length > 0 ? 6 : 8}>
@@ -562,6 +445,7 @@ export default function AdminAssignmentsTab() {
             <Typography variant="h6" gutterBottom>
               Match Assignment Overview
             </Typography>
+
 
             {matches.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -581,6 +465,7 @@ export default function AdminAssignmentsTab() {
                   </CardContent>
                 </Card>
 
+
                 <Card>
                   <CardContent>
                     <Typography variant="h4" color="primary">
@@ -591,6 +476,7 @@ export default function AdminAssignmentsTab() {
                     </Typography>
                   </CardContent>
                 </Card>
+
 
                 <Card>
                   <CardContent>
@@ -608,6 +494,7 @@ export default function AdminAssignmentsTab() {
         </Grid>
       </Grid>
 
+
       {/* Scouter Selection Modal */}
       <ScouterSelectionModal
         open={selectionModalOpen}
@@ -620,6 +507,53 @@ export default function AdminAssignmentsTab() {
           handleGenerateShifts(selected);
         }}
       />
+
+      {/* Add Shift Modal */}
+      <Modal open={addShiftModalOpen} onClose={() => setAddShiftModalOpen(false)}>
+        <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 400, bgcolor: 'background.paper', boxShadow: 24, p: 4, borderRadius: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Add New Shift
+          </Typography>
+          <TextField
+            fullWidth
+            label="Shift Name (optional)"
+            value={newShiftName}
+            onChange={(e) => setNewShiftName(e.target.value)}
+            placeholder={`Shift ${shifts.length + 1}`}
+            sx={{ mb: 3 }}
+          />
+          <Stack direction="row" spacing={2} justifyContent="flex-end">
+            <Button onClick={() => setAddShiftModalOpen(false)}>Cancel</Button>
+            <Button variant="contained" onClick={handleAddShift} disabled={loading}>
+              {loading ? <CircularProgress size={20} /> : "Add Shift"}
+            </Button>
+          </Stack>
+        </Box>
+      </Modal>
+
+      {/* Delete Shift Confirmation Modal */}
+      <Modal open={deleteShiftConfirmIndex !== null} onClose={() => setDeleteShiftConfirmIndex(null)}>
+        <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 450, bgcolor: 'background.paper', boxShadow: 24, p: 4, borderRadius: 2 }}>
+          <Typography variant="h6" gutterBottom color="error">
+            Delete Shift?
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            This will permanently delete <strong>{deleteShiftConfirmIndex !== null && shifts[deleteShiftConfirmIndex]?.name}</strong> and reassign all its matches across the remaining shifts.
+          </Typography>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            All matches will be automatically redistributed. 100% coverage will be maintained.
+          </Alert>
+          <Stack direction="row" spacing={2} justifyContent="flex-end">
+            <Button onClick={() => setDeleteShiftConfirmIndex(null)}>Cancel</Button>
+            <Button variant="contained" color="error" onClick={handleDeleteShift} disabled={loading}>
+              {loading ? <CircularProgress size={20} /> : "Delete Shift"}
+            </Button>
+          </Stack>
+        </Box>
+      </Modal>
     </Box>
   );
 }
+
+
+

@@ -11,23 +11,21 @@ import {
   Container,
   Unstable_Grid2 as Grid2,
   TextField,
-  Drawer,
-  Fab,
 } from "@mui/material";
 import { MatchStage } from "../MatchConstants";
 import MatchScoutData from "../MatchScoutData";
 import CloseIcon from "@mui/icons-material/Close";
-import SettingsIcon from "@mui/icons-material/Settings";
 import Gambling from "./Gambling";
 import bgImage from "../../assets/backGround.png";
 import firebase from "../../firebase";
 import { doc, setDoc } from "firebase/firestore";
-import TeamShiftPanel from "./Assignments/TeamShiftPanel";
+
 
 // Custom Prematch component for Fuel Scout Page
 function FuelPrematch({ data }) {
   const [counter, setCounter] = useState(0);
   const update = () => setCounter(counter + 1);
+
 
   const inputStyle = {
     "& .MuiOutlinedInput-root": {
@@ -44,6 +42,7 @@ function FuelPrematch({ data }) {
     "& .MuiInputLabel-root.Mui-focused": { color: "#FF9800" },
     width: "100%",
   };
+
 
   return (
     <Grid2 container spacing={2}>
@@ -141,10 +140,12 @@ function FuelPrematch({ data }) {
   );
 }
 
+
 // Custom Postmatch component for Fuel Scout Page
 function FuelPostmatch({ data }) {
   const [counter, setCounter] = useState(0);
   const update = () => setCounter(counter + 1);
+
 
   const inputStyle = {
     "& .MuiOutlinedInput-root": {
@@ -161,6 +162,7 @@ function FuelPostmatch({ data }) {
     "& .MuiInputLabel-root.Mui-focused": { color: "#FF9800" },
     width: "100%",
   };
+
 
   return (
     <Stack spacing={3}>
@@ -181,6 +183,7 @@ function FuelPostmatch({ data }) {
         sx={inputStyle}
         placeholder="Anything else you would like to add?"
       />
+
 
       <Typography variant="h6" sx={{ color: "white" }}>
         Quick Feedback
@@ -232,6 +235,7 @@ function FuelPostmatch({ data }) {
   );
 }
 
+
 // Main Fuel Content
 function FuelContent({
   fuelScored,
@@ -242,12 +246,14 @@ function FuelContent({
   const [counter, setCounter] = useState(0);
   const update = () => setCounter(counter + 1);
 
+
   const handleBursts = () => {
     if (!trackingBursts) {
       setFuelScored([...fuelScored, 0]);
     }
     setTrackingBursts(!trackingBursts);
   };
+
 
   const handleFuelClick = (value) => {
     const newFuelScored = [...fuelScored];
@@ -260,19 +266,23 @@ function FuelContent({
     }
   };
 
+
   const deleteFuel = (index) => {
     const newFuelScored = [...fuelScored];
     newFuelScored.splice(index, 1);
     setFuelScored(newFuelScored);
   };
 
+
   const getTotalFuel = () => {
     return fuelScored.reduce((sum, val) => sum + val, 0);
   };
 
+
   const getCurrentBurstFuel = () => {
     return fuelScored[fuelScored.length - 1];
   };
+
 
   return (
     <Stack spacing={3}>
@@ -305,6 +315,7 @@ function FuelContent({
         </Typography>
       </Box>
 
+
       {/* Start/End Burst Button */}
       <Button
         variant="contained"
@@ -322,6 +333,7 @@ function FuelContent({
         {trackingBursts ? "⏹ End Burst" : "▶ Start Burst"}
       </Button>
 
+
       {/* Add/Remove Fuel Buttons */}
       {trackingBursts && (
         <Box sx={{ bgcolor: "rgba(0,0,0,0.6)", borderRadius: 2, p: 3 }}>
@@ -331,6 +343,7 @@ function FuelContent({
           >
             Current Burst: {getCurrentBurstFuel()} Fuel
           </Typography>
+
 
           <Stack spacing={2}>
             <Stack direction="row" spacing={1.5}>
@@ -373,6 +386,7 @@ function FuelContent({
           </Stack>
         </Box>
       )}
+
 
       {/* Burst History with individual delete buttons */}
       {fuelScored.length > 1 && (
@@ -425,6 +439,7 @@ function FuelContent({
   );
 }
 
+
 export default function FuelScout() {
   const [alert, setAlert] = useState({
     open: false,
@@ -433,18 +448,20 @@ export default function FuelScout() {
   });
   let data = useMemo(() => new MatchScoutData(setAlert), []);
 
+
   const [stage, setStage] = useState(MatchStage.PRE_MATCH);
   const [currentComponent, setCurrentComponent] = useState(
     <FuelPrematch data={data} />
   );
   const [fuelScored, setFuelScored] = useState([0]);
   const [trackingBursts, setTrackingBursts] = useState(false);
-  const [shiftPanelOpen, setShiftPanelOpen] = useState(false);
+
 
   const handleStageChange = (newStage) => {
     data.stage = newStage;
     setStage(newStage);
   };
+
 
   const handleNext = () => {
     if (stage === MatchStage.PRE_MATCH) {
@@ -456,6 +473,7 @@ export default function FuelScout() {
       const name = data.get(MatchStage.PRE_MATCH, "name");
       const team = data.get(MatchStage.PRE_MATCH, "team");
       const match = data.get(MatchStage.PRE_MATCH, "match");
+
 
       if (!verificationCode || !name || !team || !match) {
         setAlert({
@@ -474,6 +492,7 @@ export default function FuelScout() {
     }
   };
 
+
   const handlePrevious = () => {
     if (stage === MatchStage.TELEOP) {
       handleStageChange(MatchStage.PRE_MATCH);
@@ -483,6 +502,7 @@ export default function FuelScout() {
       handleStageChange(MatchStage.POST_MATCH);
     }
   };
+
 
   // Update component based on stage
   useMemo(() => {
@@ -513,6 +533,7 @@ export default function FuelScout() {
     }
   }, [stage, fuelScored, trackingBursts]);
 
+
   const getStageTitle = () => {
     switch (stage) {
       case MatchStage.PRE_MATCH:
@@ -528,6 +549,7 @@ export default function FuelScout() {
     }
   };
 
+
   return (
     <Box
       sx={{
@@ -537,42 +559,8 @@ export default function FuelScout() {
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         py: 3,
-        position: "relative",
       }}
     >
-      {/* Shift Panel Drawer */}
-      <Drawer
-        anchor="right"
-        open={shiftPanelOpen}
-        onClose={() => setShiftPanelOpen(false)}
-        PaperProps={{
-          sx: {
-            width: { xs: "100%", sm: 400, md: 500 },
-            bgcolor: "background.paper",
-          },
-        }}
-      >
-        <TeamShiftPanel
-          showTeamSelector={true}
-          compact={true}
-        />
-      </Drawer>
-
-      {/* Floating Action Button to open shift panel */}
-      <Fab
-        color="primary"
-        aria-label="shift settings"
-        onClick={() => setShiftPanelOpen(true)}
-        sx={{
-          position: "fixed",
-          bottom: 16,
-          right: 16,
-          zIndex: 1000,
-        }}
-      >
-        <SettingsIcon />
-      </Fab>
-
       <Container maxWidth="md">
         <Stack spacing={3}>
           {/* Header */}
@@ -599,6 +587,7 @@ export default function FuelScout() {
             />
           </Box>
 
+
           {/* Alert */}
           <Collapse in={alert.open}>
             <Alert
@@ -618,6 +607,7 @@ export default function FuelScout() {
             </Alert>
           </Collapse>
 
+
           {/* Main Content */}
           <Box
             sx={{
@@ -629,6 +619,7 @@ export default function FuelScout() {
           >
             {currentComponent}
           </Box>
+
 
           {/* Navigation Buttons */}
           <Stack direction="row" spacing={2} justifyContent="center">
@@ -651,6 +642,7 @@ export default function FuelScout() {
               </Button>
             )}
 
+
             {stage === MatchStage.GAMBLING ? (
               <Button
                 variant="contained"
@@ -666,6 +658,7 @@ export default function FuelScout() {
                   const alliance = data.get(MatchStage.PRE_MATCH, "alliance");
                   const comments = data.get(MatchStage.POST_MATCH, "comments");
 
+
                   // Get post match data
                   const disabled = data.getPostData("disabled");
                   const brownsOut = data.getPostData("brownsOut");
@@ -676,6 +669,7 @@ export default function FuelScout() {
                   const trench = data.getPostData("trench");
                   const defense = data.getPostData("defense");
                   const shuttle = data.getPostData("shuttle");
+
 
                   try {
                     await setDoc(
@@ -755,3 +749,6 @@ export default function FuelScout() {
     </Box>
   );
 }
+
+
+

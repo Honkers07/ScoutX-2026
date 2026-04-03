@@ -1,4 +1,4 @@
-import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container, Drawer, Fab } from "@mui/material";
+import { Alert, Button, Collapse, Divider, IconButton, Stack, Typography, Box, Container } from "@mui/material";
 import Page from "../Page";
 import { useEffect, useMemo, useState } from "react";
 import MatchScoutData from "../MatchScoutData";
@@ -8,10 +8,8 @@ import MSPrematch from "./matchscout/MSPrematch";
 import MSPostmatch from "./matchscout/MSPostmatch";
 import MSTeleop from "./matchscout/MSTeleop";
 import CloseIcon from "@mui/icons-material/Close";
-import SettingsIcon from "@mui/icons-material/Settings";
 import Gambling from "./Gambling";
 import { markAssignmentComplete, syncAssignmentsWithSubmittedMatches } from "./Assignments/AssignmentHelpers";
-import TeamShiftPanel from "./Assignments/TeamShiftPanel";
 
 export default function MatchScout() {
     // Memoize the `data` object and pass in `setAlert`
@@ -20,7 +18,6 @@ export default function MatchScout() {
 
     const [stage, setStage] = useState(data.stage);
     const [currentComponent, setCurrentComponent] = useState(<MSPrematch data={data} />);
-    const [shiftPanelOpen, setShiftPanelOpen] = useState(false);
 
     const handleStageChange = (newStage) => {
         data.stage = newStage;
@@ -49,38 +46,6 @@ export default function MatchScout() {
 
     return (
         <Container>
-            {/* Shift Panel Drawer */}
-            <Drawer
-                anchor="right"
-                open={shiftPanelOpen}
-                onClose={() => setShiftPanelOpen(false)}
-                PaperProps={{
-                    sx: {
-                        width: { xs: "100%", sm: 400, md: 500 },
-                        bgcolor: "background.paper",
-                    },
-                }}
-            >
-                <TeamShiftPanel
-                    showTeamSelector={true}
-                    compact={true}
-                />
-            </Drawer>
-
-            {/* Floating Action Button to open shift panel */}
-            <Fab
-                color="primary"
-                aria-label="shift settings"
-                onClick={() => setShiftPanelOpen(true)}
-                sx={{
-                    position: "fixed",
-                    bottom: 16,
-                    right: 16,
-                    zIndex: 1000,
-                }}
-            >
-                <SettingsIcon />
-            </Fab>
             <Stack direction="column" spacing={2} mt={2} pb={6} align="center">
                 <Typography color={"white"} variant={"h4"} sx={{ mt: 4 }}>
                     Match Scout
