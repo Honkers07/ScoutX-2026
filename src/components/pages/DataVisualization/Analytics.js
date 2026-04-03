@@ -62,7 +62,7 @@ const Analytics = () => {
           "elevatorBroken",
           "armBroken",
           "brownsOut",
-          "wobbly",
+          "shooterBroken",
           "canKnockAlgae",
           "missesOuttakesConsistently",
           "slowIntakes",
@@ -74,6 +74,9 @@ const Analytics = () => {
           "eStopped",
           "knockedCage",
           "failedClimb",
+          "stoleFuel",
+          "wasDefendedAgainst",
+          "defended",
         ];
 
         const Points = [

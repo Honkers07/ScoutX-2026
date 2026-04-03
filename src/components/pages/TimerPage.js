@@ -651,13 +651,15 @@ function TimerPostmatch({
         {[
           { label: "Was Disabled", key: "disabled" },
           { label: "Browns Out / Jittery", key: "brownsOut" },
-          { label: "Tips Over / Wobbly", key: "wobbly" },
+          { label: "Shooter Broken", key: "shooterBroken" },
           { label: "Intake Broken", key: "intakeBroken" },
           { label: "Outtake Broken", key: "outtakeBroken" },
           { label: "Failed Climb", key: "failedClimb" },
           { label: "Trench", key: "trench" },
-          { label: "Defense/Stealing", key: "defense" },
+          { label: "Stole Fuel", key: "stoleFuel" },
           { label: "Shuttle", key: "shuttle" },
+          { label: "Was Defended Against", key: "wasDefendedAgainst" },
+          { label: "Defended", key: "defended" },
         ].map((item) => {
           const quickFeedback =
             data.get(MatchStage.POST_MATCH, "quickFeedback") || [];
