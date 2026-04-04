@@ -23,6 +23,54 @@ const DataTable = () => {
   const [sortBy, setSortBy] = useState("Average Total Fuel"); // Default sort column
   const [sortDirection, setSortDirection] = useState("asc"); // Default sort direction
   const [deletedRows, setDeletedRows] = useState([]); // Track deleted rows
+
+  // Get icon for defense metric - colored circle
+  const getDefenseMetricIcon = (metric) => {
+    let color;
+    if (!metric || metric <= 0) {
+      return "N/A";
+    } else if (metric > 0.5) {
+      color = "#2e7d32"; // Dark green - excellent
+    } else if (metric > 0.25) {
+      color = "#f9a825"; // Muted yellow - average
+    } else {
+      color = "#c62828"; // Muted red - poor
+    }
+    return (
+      <Box
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          backgroundColor: color,
+          display: "inline-block",
+        }}
+      />
+    );
+  };
+
+  // Get icon for data quality - colored circle
+  const getDataQualityIcon = (quality) => {
+    let color;
+    if (!quality || quality < 0.5) {
+      color = "#c62828"; // Muted red
+    } else if (quality < 0.75) {
+      color = "#f9a825"; // Muted yellow
+    } else {
+      color = "#2e7d32"; // Dark green
+    }
+    return (
+      <Box
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          backgroundColor: color,
+          display: "inline-block",
+        }}
+      />
+    );
+  };
   const [restoreMatch, setRestoreMatch] = useState(""); // Track match to restore
 
   const matchDataRef = collection(firebase, "matchData");
@@ -80,6 +128,22 @@ const DataTable = () => {
           acc.simpleTotalFuel += totalFuel;
           acc.simpleBallsPerSecond += ballsPerSecond;
           acc.simpleShootingTime += shootingTime;
+          acc.simpleDataQuality += teamData.quality || 0;
+          acc.dataQualityMatchCount++;
+
+          // Defense metrics - derive from quickFeedback
+          const quickFeedback = teamData.quickFeedback || [];
+          const wasDefending = quickFeedback.includes("Defended");
+          const wasDefendedAgainst = quickFeedback.includes("Was Defended Against");
+          
+          // Only count defenseMetric if the team was actually defending
+          if (wasDefending) {
+            acc.simpleDefenseMetric += teamData.defenseMetric || 0;
+            acc.defendingMatchCount++;
+          }
+          if (wasDefendedAgainst) {
+            acc.defendedAgainstCount++;
+          }
 
           acc.matchCount++;
         }
@@ -97,6 +161,11 @@ const DataTable = () => {
         simpleTotalFuel: 0,
         simpleBallsPerSecond: 0,
         simpleShootingTime: 0,
+        simpleDefenseMetric: 0,
+        simpleDataQuality: 0,
+        dataQualityMatchCount: 0,
+        defendingMatchCount: 0,
+        defendedAgainstCount: 0,
         matchCount: 0,
       }
     );
@@ -107,8 +176,10 @@ const DataTable = () => {
       return {
         "Average Total Fuel": 0,
         "Average Auto Fuel": 0,
+        "Average Data Quality": "N/A",
         "Average Balls Per Second": 0,
-        "Average Shooting Time": 0,
+        "Average Defense Metric": 0,
+        "Defended Against %": "N/A",
       };
     }
 
@@ -119,10 +190,20 @@ const DataTable = () => {
           Math.round((result.weightedTotalFuel / totalWeight) * 10) / 10,
         "Average Auto Fuel":
           Math.round((result.weightedAutoFuel / totalWeight) * 10) / 10,
+        "Average Data Quality":
+          result.dataQualityMatchCount > 0
+            ? parseFloat((result.simpleDataQuality / result.dataQualityMatchCount).toFixed(2))
+            : "N/A",
         "Average Balls Per Second":
           Math.round((result.weightedBallsPerSecond / totalWeight) * 100) / 100,
-        "Average Shooting Time":
-          Math.round((result.weightedShootingTime / totalWeight) * 10) / 10,
+        "Average Defense Metric":
+          result.defendingMatchCount > 0
+            ? Math.round((result.simpleDefenseMetric / result.defendingMatchCount) * 100) / 100
+            : "N/A",
+        "Defended Against %":
+          result.defendedAgainstCount > 0
+            ? Math.round((result.defendedAgainstCount / matchCount) * 100) + "%"
+            : "N/A",
       };
     } else {
       return {
@@ -130,10 +211,20 @@ const DataTable = () => {
           Math.round((result.simpleTotalFuel / matchCount) * 10) / 10,
         "Average Auto Fuel":
           Math.round((result.simpleAutoFuel / matchCount) * 10) / 10,
+        "Average Data Quality":
+          result.dataQualityMatchCount > 0
+            ? parseFloat((result.simpleDataQuality / result.dataQualityMatchCount).toFixed(2))
+            : "N/A",
         "Average Balls Per Second":
           Math.round((result.simpleBallsPerSecond / matchCount) * 100) / 100,
-        "Average Shooting Time":
-          Math.round((result.simpleShootingTime / matchCount) * 10) / 10,
+        "Average Defense Metric":
+          result.defendingMatchCount > 0
+            ? Math.round((result.simpleDefenseMetric / result.defendingMatchCount) * 100) / 100
+            : "N/A",
+        "Defended Against %":
+          result.defendedAgainstCount > 0
+            ? Math.round((result.defendedAgainstCount / matchCount) * 100) + "%"
+            : "N/A",
       };
     }
   };
@@ -218,10 +309,12 @@ const DataTable = () => {
   });
 
   const columns = [
+    "Average Data Quality",
     "Average Total Fuel",
     "Average Auto Fuel",
     "Average Balls Per Second",
-    "Average Shooting Time",
+    "Average Defense Metric",
+    "Defended Against %",
   ];
 
   return (
@@ -291,6 +384,11 @@ const DataTable = () => {
               </TableCell>
               <TableCell sx={{ color: "#f57c00" }}>{team.teamNumber}</TableCell>
               <TableCell sx={{ color: "white" }}>
+                {team["Average Data Quality"] !== "N/A"
+                  ? getDataQualityIcon(team["Average Data Quality"])
+                  : "N/A"}
+              </TableCell>
+              <TableCell sx={{ color: "white" }}>
                 {Number(team["Average Total Fuel"].toFixed(1))}
               </TableCell>
               <TableCell sx={{ color: "white" }}>
@@ -300,7 +398,16 @@ const DataTable = () => {
                 {Number(team["Average Balls Per Second"].toFixed(1))}
               </TableCell>
               <TableCell sx={{ color: "white" }}>
-                {Number(team["Average Shooting Time"].toFixed(1))}
+                {team["Average Defense Metric"] !== "N/A"
+                  ? getDefenseMetricIcon(team["Average Defense Metric"])
+                  : "N/A"}
+              </TableCell>
+              <TableCell sx={{ color: "white" }}>
+                {typeof team["Defended Against %"] === "string" && team["Defended Against %"].includes("%")
+                  ? team["Defended Against %"]
+                  : team["Defended Against %"] === "N/A"
+                    ? "N/A"
+                    : `${team["Defended Against %"]}%`}
               </TableCell>
             </TableRow>
           ))}

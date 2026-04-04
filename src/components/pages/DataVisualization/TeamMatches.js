@@ -48,6 +48,8 @@ const TeamMatches = () => {
     "totalClimb",
     "autoClimb",
     "teleClimb",
+    "defenseMetric",
+    "wasDefendedAgainst",
     "comments",
     "quickFeedback",
   ];
@@ -97,6 +99,8 @@ const TeamMatches = () => {
             teleClimb: teamInfo.teleClimb || 0,
             totalClimb: (teamInfo.autoClimb || 0) + (teamInfo.teleClimb || 0),
             dataQuality: teamInfo.quality || 0,
+            defenseMetric: teamInfo.defenseMetric != null ? teamInfo.defenseMetric : 0,
+            wasDefendedAgainst: (teamInfo.quickFeedback || []).includes("Was Defended Against"),
             comments: teamInfo.comments || "None",
             quickFeedback:
               Array.isArray(teamInfo.quickFeedback) &&
@@ -189,6 +193,7 @@ const TeamMatches = () => {
       autoClimb: 0,
       teleClimb: 0,
       totalClimb: 0,
+      defenseMetric: 0,
     };
 
     // Sum fields for simple average (data quality)
@@ -202,6 +207,9 @@ const TeamMatches = () => {
       teleClimb: 0,
       totalClimb: 0,
       dataQuality: 0,
+      defenseMetric: 0,
+      defendedAgainstCount: 0,
+      defendingMatchCount: 0,
     };
 
     // Sum up all numerical fields from the matches to average
@@ -218,8 +226,10 @@ const TeamMatches = () => {
       weightedSums.autoClimb += (match.autoClimb || 0) * weight;
       weightedSums.teleClimb += (match.teleClimb || 0) * weight;
       weightedSums.totalClimb += (match.totalClimb || 0) * weight;
+      weightedSums.defenseMetric += (match.defenseMetric || 0) * weight;
 
       // For simple sums
+      const quickFeedback = match.quickFeedback || "";
       sumFields.autoFuel += match.autoFuel || 0;
       sumFields.teleFuel += match.teleFuel || 0;
       sumFields.totalFuel += match.totalFuel || 0;
@@ -229,6 +239,14 @@ const TeamMatches = () => {
       sumFields.teleClimb += match.teleClimb || 0;
       sumFields.totalClimb += match.totalClimb || 0;
       sumFields.dataQuality += quality;
+      // Only count defense metric for matches where the team was actually defending
+      if (quickFeedback.includes("Defended")) {
+        sumFields.defenseMetric += match.defenseMetric || 0;
+        sumFields.defendingMatchCount++;
+      }
+      if (match.wasDefendedAgainst) {
+        sumFields.defendedAgainstCount++;
+      }
     });
 
     // Compute weighted averages for metrics, fall back to simple average if no weight
@@ -257,6 +275,9 @@ const TeamMatches = () => {
       averageMatch.totalClimb = parseFloat(
         (weightedSums.totalClimb / totalWeight).toFixed(1)
       );
+      averageMatch.defenseMetric = parseFloat(
+        (weightedSums.defenseMetric / totalWeight).toFixed(2)
+      );
     } else {
       // Fall back to simple average
       averageMatch.autoFuel = parseFloat(
@@ -283,12 +304,23 @@ const TeamMatches = () => {
       averageMatch.totalClimb = parseFloat(
         (sumFields.totalClimb / numMatches).toFixed(1)
       );
+      averageMatch.defenseMetric = parseFloat(
+        (sumFields.defenseMetric / numMatches).toFixed(2)
+      );
     }
 
     // Data quality is always a simple average (not weighted)
     averageMatch.dataQuality = parseFloat(
       (sumFields.dataQuality / numMatches).toFixed(2)
     );
+    // For defense metric, only show average if team was actually defending in some matches
+    averageMatch.defenseMetric = sumFields.defendingMatchCount > 0
+      ? parseFloat((sumFields.defenseMetric / sumFields.defendingMatchCount).toFixed(2))
+      : "N/A";
+    // For wasDefendedAgainst, show as percentage
+    averageMatch.wasDefendedAgainst = parseFloat(
+      (sumFields.defendedAgainstCount / numMatches * 100).toFixed(0)
+    ) + "%";
     averageMatch.comments = "N/A";
     averageMatch.quickFeedback = "N/A";
 
@@ -420,6 +452,8 @@ const TeamMatches = () => {
     if (column === "totalFuel") return "Total Fuel";
     if (column === "comments") return "Comments";
     if (column === "dataQuality") return "Data Quality";
+    if (column === "defenseMetric") return "Defense Metric";
+    if (column === "wasDefendedAgainst") return "Was Defended";
     return column.replace(/([a-z])([A-Z])/g, "$1 $2");
   };
 
@@ -440,6 +474,47 @@ const TeamMatches = () => {
     } else {
       color = "#2e7d32"; // Dark green
     }
+    return (
+      <Box
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          backgroundColor: color,
+          display: "inline-block",
+        }}
+      />
+    );
+  };
+
+  // Get icon for defense metric - colored circle
+  const getDefenseMetricIcon = (metric) => {
+    let color;
+    if (!metric || metric <= 0) {
+      return "N/A";
+    } else if (metric > 0.5) {
+      color = "#2e7d32"; // Dark green - excellent
+    } else if (metric > 0.25) {
+      color = "#f9a825"; // Muted yellow - average
+    } else {
+      color = "#c62828"; // Muted red - poor
+    }
+    return (
+      <Box
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          backgroundColor: color,
+          display: "inline-block",
+        }}
+      />
+    );
+  };
+
+  // Get icon for wasDefendedAgainst - green circle for yes, red for no
+  const getWasDefendedIcon = (wasDefended) => {
+    const color = wasDefended ? "#2e7d32" : "#c62828"; // Green if defended, Red if not
     return (
       <Box
         sx={{
@@ -630,6 +705,16 @@ const TeamMatches = () => {
                                   match.matchNumber === "Average"
                                   ? getDataQualityIcon(match.dataQuality)
                                   : getDataQualityIcon(match.dataQuality)
+                                : column === "defenseMetric"
+                                ? match.defenseMetric === "N/A" || typeof match.defenseMetric !== "number"
+                                  ? "N/A"
+                                  : getDefenseMetricIcon(match.defenseMetric)
+                                : column === "wasDefendedAgainst"
+                                ? typeof match.matchNumber === "string" && match.matchNumber.includes("Average")
+                                  ? typeof match.wasDefendedAgainst === "string" && match.wasDefendedAgainst.includes("%")
+                                    ? match.wasDefendedAgainst
+                                    : getWasDefendedIcon(match.wasDefendedAgainst)
+                                  : getWasDefendedIcon(match.wasDefendedAgainst)
                                 : typeof match[column] === "number"
                                 ? Number(match[column].toFixed(1))
                                 : match[column]}

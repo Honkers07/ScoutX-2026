@@ -1,3 +1,4 @@
+// FuelCalculatorFinal.js - Combined implementation of FuelCalculatorKILO and FuelCalculatorGPT
 import {
   collection,
   query,
@@ -115,6 +116,11 @@ function splitAutoTeleByTime(time, value) {
 
 function roundFuel(x) {
   return Math.round(Number(x ?? 0));
+}
+
+function average(values) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  return values.reduce((sum, v) => sum + Number(v || 0), 0) / values.length;
 }
 
 /**
@@ -392,8 +398,6 @@ export function estimateBallPerSecond(
   const bpsC = Number(currentBps ?? 0);
   const shootingTime = Number(totalShootingTime ?? 0);
 
-  // Only use historical averaging when confidence < threshold
-  // AND total shooting time > minimum threshold
   if (
     confC >= HISTORICAL_AVERAGING.LOW_CONFIDENCE_THRESHOLD ||
     shootingTime <= HISTORICAL_AVERAGING.MIN_TOTAL_SHOOTING_TIME_FOR_AVERAGING
@@ -407,15 +411,12 @@ export function estimateBallPerSecond(
   if (historical.length < HISTORICAL_AVERAGING.MIN_HISTORICAL_MATCHES)
     return bpsC;
 
-  // Current match still uses current confidence as weight
   let weightedSum = bpsC * confC;
   let weightSum = confC;
 
   for (const m of historical) {
     const matchesAgo = Math.max(1, Number(m.matchesAgo ?? 1));
     const recencyFactor = Math.pow(decayRate, matchesAgo);
-
-    // Historical matches use QUALITY instead of confidence
     const weight = clamp01(m.quality ?? 0) * recencyFactor;
 
     weightedSum += Number(m.ballsPerSecond ?? 0) * weight;
@@ -451,14 +452,12 @@ function determineAutoWinner(videoScoreDoc) {
 function getHubActivePeriods(alliance, autoWinner) {
   const periods = [];
 
-  // BOTH ACTIVE: AUTO, TRANSITION SHIFT, TRANSITION, END GAME
   periods.push({ start: 0, end: MATCH_TIMING.TRANSITION_END });
   periods.push({
     start: MATCH_TIMING.SHIFT4_END,
     end: MATCH_TIMING.END_GAME_END,
   });
 
-  // Alternating shifts
   const shifts = [
     { start: MATCH_TIMING.TRANSITION_END, end: MATCH_TIMING.SHIFT1_END },
     { start: MATCH_TIMING.SHIFT1_END, end: MATCH_TIMING.SHIFT2_END },
@@ -546,6 +545,52 @@ async function getMatchDataHistory(matchNumber, teamNumber) {
       quality: Number(entry.quality ?? entry.confidence ?? 0),
       matchesAgo: ago,
     });
+  }
+
+  return out;
+}
+
+/**
+ * Fetch prior matchData entries for teams in this match so defense weighting
+ * can use historical totalFuel / wasDefending / wasDefendedAgainst / defenseMetric
+ */
+async function getHistoricalDefenseData(matchNumber, teamNumbers = []) {
+  if (!Array.isArray(teamNumbers) || teamNumbers.length === 0) return [];
+
+  const qy = query(
+    collection(firebase, "matchData"),
+    where("matchNumber", "<", Number(matchNumber)),
+    orderBy("matchNumber", "desc"),
+    limit(50)
+  );
+
+  const snap = await getDocs(qy);
+  const wanted = new Set(teamNumbers.map((t) => Number(t)));
+  const out = [];
+
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const teams = Array.isArray(data?.teams) ? data.teams : [];
+
+    for (const team of teams) {
+      const teamNumber = Number(team.teamNumber ?? team.team);
+      if (!wanted.has(teamNumber)) continue;
+
+      out.push({
+        team: teamNumber,
+        teamNumber,
+        totalFuel: Number(team.totalFuel ?? 0),
+        wasDefending:
+          Boolean(team.wasDefending) ||
+          (Array.isArray(team.quickFeedback) &&
+            team.quickFeedback.includes("Defended")),
+        wasDefendedAgainst:
+          Boolean(team.wasDefendedAgainst) ||
+          (Array.isArray(team.quickFeedback) &&
+            team.quickFeedback.includes("Was Defended Against")),
+        defenseMetric: Number(team.defenseMetric ?? 0),
+      });
+    }
   }
 
   return out;
@@ -709,8 +754,6 @@ async function runVideoMethodForAlliance({
     calculateTotalShootingTime(t.shootingTimesAdjustedCropped || [])
   );
 
-  // Get historical data only for teams that meet BOTH conditions:
-  // low confidence AND enough total shooting time
   const histories = await Promise.all(
     allianceTeams.map(async (t, idx) => {
       const shouldUseHistorical =
@@ -739,7 +782,6 @@ async function runVideoMethodForAlliance({
     fuelTeleByRobot[robotIdx] += teleAdd;
   };
 
-  // Distribute fuel for multiple robot segments
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     if (seg.type !== "multiple") continue;
@@ -839,6 +881,151 @@ function getActualFuelFromTimeline(scoreTimeline) {
   return { autoFuel, teleFuel, totalFuel: autoFuel + teleFuel };
 }
 
+// ----------------------------- Defense Metrics Helpers -----------------------------
+
+/**
+ * Calculate defense metrics for all teams in a match
+ * @param {Array} allTeams - All team results for this match with totalFuel calculated
+ * @param {Array} historicalMatchData - Historical match data for all teams
+ * @returns {Array} - Teams with defense metrics added
+ */
+export function calculateDefenseMetrics(allTeams, historicalMatchData = []) {
+  if (!Array.isArray(allTeams) || allTeams.length === 0) {
+    return [];
+  }
+
+  const defendingTeams = allTeams.filter((t) =>
+    (t.quickFeedback || []).includes("Defended")
+  );
+  const defendedTeams = allTeams.filter((t) =>
+    (t.quickFeedback || []).includes("Was Defended Against")
+  );
+
+  if (defendingTeams.length === 0) {
+    return allTeams.map((t) => ({
+      ...t,
+      defenseMetric: -1,
+    }));
+  }
+
+  const reductions = [];
+  for (const defendedTeam of defendedTeams) {
+    const historicalAvg = getHistoricalAverageFuelWhenNotDefended(
+      defendedTeam.team,
+      historicalMatchData
+    );
+
+    const baselineFuel =
+      historicalAvg > 0
+        ? historicalAvg
+        : getCurrentMatchFallbackBaseline(defendedTeam.team, allTeams);
+
+    if (baselineFuel <= 0) continue;
+
+    const actualFuel = Number(defendedTeam.totalFuel ?? 0);
+    const reduction = baselineFuel - actualFuel;
+
+    if (reduction > 0) {
+      reductions.push(reduction / baselineFuel);
+    }
+  }
+
+  const avgReduction = average(reductions);
+
+  let defenseCredits = [];
+
+  if (defendingTeams.length === 1) {
+    defenseCredits = [
+      {
+        team: defendingTeams[0].team,
+        finalDefenseMetric: avgReduction,
+      },
+    ];
+  } else {
+    const historicalMetrics = defendingTeams.map((d) => ({
+      team: d.team,
+      historicalAvg: getHistoricalDefenseMetric(d.team, historicalMatchData),
+    }));
+
+    const totalHistorical = historicalMetrics.reduce(
+      (sum, h) => sum + h.historicalAvg,
+      0
+    );
+
+    if (totalHistorical === 0) {
+      const equalShare = avgReduction / defendingTeams.length;
+      defenseCredits = defendingTeams.map((d) => ({
+        team: d.team,
+        finalDefenseMetric: equalShare,
+      }));
+    } else {
+      defenseCredits = historicalMetrics.map((h) => ({
+        team: h.team,
+        finalDefenseMetric:
+          avgReduction * (h.historicalAvg / totalHistorical),
+      }));
+    }
+  }
+
+  return allTeams.map((team) => {
+    const defenseInfo = defenseCredits.find((d) => d.team === team.team);
+    const isDefending = (team.quickFeedback || []).includes("Defended");
+
+    return {
+      ...team,
+      defenseMetric: isDefending
+        ? Number(defenseInfo?.finalDefenseMetric ?? 0)
+        : -1,
+    };
+  });
+}
+
+function getCurrentMatchFallbackBaseline(teamNumber, allTeams) {
+  const peers = (allTeams || []).filter((t) => Number(t.team) !== Number(teamNumber));
+  if (peers.length === 0) return 0;
+  return average(peers.map((t) => Number(t.totalFuel ?? 0)));
+}
+
+/**
+ * Get historical average fuel for a team when they were NOT defended against
+ */
+function getHistoricalAverageFuelWhenNotDefended(teamNumber, historicalMatchData) {
+  if (!Array.isArray(historicalMatchData) || historicalMatchData.length === 0) {
+    return 0;
+  }
+
+  const teamMatches = historicalMatchData.filter(
+    (m) => Number(m.team ?? m.teamNumber) === Number(teamNumber)
+  );
+
+  const notDefendedMatches = teamMatches.filter((m) => !m.wasDefendedAgainst);
+
+  if (notDefendedMatches.length === 0) {
+    if (teamMatches.length === 0) return 0;
+    return average(teamMatches.map((m) => Number(m.totalFuel ?? 0)));
+  }
+
+  return average(notDefendedMatches.map((m) => Number(m.totalFuel ?? 0)));
+}
+
+/**
+ * Get a team's historical average defense metric from past matches
+ */
+function getHistoricalDefenseMetric(teamNumber, historicalMatchData) {
+  if (!Array.isArray(historicalMatchData) || historicalMatchData.length === 0) {
+    return 0;
+  }
+
+  const teamMatches = historicalMatchData.filter(
+    (m) =>
+      Number(m.team ?? m.teamNumber) === Number(teamNumber) && m.wasDefending
+  );
+
+  if (teamMatches.length === 0) return 0;
+
+  return average(teamMatches.map((m) => Number(m.defenseMetric ?? 0)));
+}
+
 // ----------------------------- Main function -----------------------------
 
 export async function calculateFuelScored(matchNumber) {
@@ -850,7 +1037,6 @@ export async function calculateFuelScored(matchNumber) {
   const timerDocs = await getTimerScoutData(m);
   const fuelDocs = await getFuelScoutData(m);
 
-  // Deduplicate timer data by team (keep most recent)
   const timerByTeam = new Map();
   for (const d of timerDocs) {
     const team = Number(d.team ?? d.teamNumber);
@@ -866,7 +1052,6 @@ export async function calculateFuelScored(matchNumber) {
     }
   }
 
-  // Map fuel data by team
   const fuelByTeam = new Map();
   for (const d of fuelDocs) {
     const team = Number(d.team ?? d.teamNumber);
@@ -880,7 +1065,6 @@ export async function calculateFuelScored(matchNumber) {
     distinctTeams.size === 6 &&
     determineAutoWinner(videoScore) !== "tie";
 
-  // Get actual fuel from scoreboard for accuracy calculation
   let actualRedFuel = { autoFuel: 0, teleFuel: 0, totalFuel: 0 };
   let actualBlueFuel = { autoFuel: 0, teleFuel: 0, totalFuel: 0 };
 
@@ -892,6 +1076,12 @@ export async function calculateFuelScored(matchNumber) {
       videoScore.blueScoreTimeline || []
     );
   }
+
+  const allTeamNumbers = [...distinctTeams];
+  const historicalDefenseData = await getHistoricalDefenseData(
+    m,
+    allTeamNumbers
+  );
 
   if (canVideo) {
     const autoWinner = determineAutoWinner(videoScore);
@@ -949,7 +1139,6 @@ export async function calculateFuelScored(matchNumber) {
         }),
       ]);
 
-      // Calculate accuracy metrics
       const calculatedRedAutoFuel = redRes.reduce(
         (sum, r) => sum + r.autoFuel,
         0
@@ -1021,7 +1210,7 @@ export async function calculateFuelScored(matchNumber) {
         calculatedBlueTeleFuel
       );
 
-      return [
+      const finalVideoResults = [
         ...adjustedRedRes.map((r) => ({
           team: r.team,
           match: r.match,
@@ -1057,10 +1246,11 @@ export async function calculateFuelScored(matchNumber) {
           quality: calculateQuality(r, blueAccuracy),
         })),
       ];
+
+      return calculateDefenseMetrics(finalVideoResults, historicalDefenseData);
     }
   }
 
-  // -------- Basic fallback --------
   const teams = new Set([...timerByTeam.keys(), ...fuelByTeam.keys()]);
   const results = [];
 
@@ -1110,7 +1300,6 @@ export async function calculateFuelScored(matchNumber) {
     });
   }
 
-  // Calculate accuracy for basic method
   const redResults = results.filter((r) => r.alliance === "red");
   const blueResults = results.filter((r) => r.alliance === "blue");
 
@@ -1180,7 +1369,7 @@ export async function calculateFuelScored(matchNumber) {
     calculatedBlueTeleFuel
   );
 
-  return [
+  const finalBasicResults = [
     ...adjustedRedResults.map((r) => ({
       team: r.team,
       match: r.match,
@@ -1194,6 +1383,9 @@ export async function calculateFuelScored(matchNumber) {
       autoClimb: r.autoClimb,
       teleClimb: r.teleClimb,
       quickFeedback: r.quickFeedback,
+      accuracy: redAccuracy,
+      confidence: -1,
+      quality: calculateQuality({ ...r, confidence: -1 }, redAccuracy),
     })),
     ...adjustedBlueResults.map((r) => ({
       team: r.team,
@@ -1208,8 +1400,13 @@ export async function calculateFuelScored(matchNumber) {
       autoClimb: r.autoClimb,
       teleClimb: r.teleClimb,
       quickFeedback: r.quickFeedback,
+      accuracy: blueAccuracy,
+      confidence: -1,
+      quality: calculateQuality({ ...r, confidence: -1 }, blueAccuracy),
     })),
   ];
+
+  return calculateDefenseMetrics(finalBasicResults, historicalDefenseData);
 }
 
 // Default export

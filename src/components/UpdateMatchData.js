@@ -40,6 +40,7 @@ export async function updateMatchData(matchNumber) {
       console.log(
         `[updateMatchData] Calculation complete for match ${matchNumber}, got ${results.length} team results`
       );
+      console.log("[updateMatchData] First result:", JSON.stringify(results[0], null, 2));
 
       // Transform to matchData format
       const matchDataDoc = {
@@ -58,17 +59,31 @@ export async function updateMatchData(matchNumber) {
           autoClimb: r.autoClimb ?? 0,
           teleClimb: r.teleClimb ?? 0,
           quickFeedback: r.quickFeedback ?? [],
+          defenseMetric: r.defenseMetric ?? -1,
         })),
         lastUpdated: Date.now(),
         calculationMethod: results[0]?.method ?? "unknown",
       };
 
       // Submit to matchData collection
-      await setDoc(
-        doc(firebase, "matchData", String(matchNumber)),
-        matchDataDoc,
-        { merge: true }
-      );
+      console.log("[updateMatchData] using calculateFuelScored for match", matchNumber);
+console.log(
+  "[updateMatchData] results:",
+  results.map((r) => ({
+    team: r.team,
+    defenseMetric: r.defenseMetric,
+  }))
+);
+      try {
+        await setDoc(
+          doc(firebase, "matchData", String(matchNumber)),
+          matchDataDoc,
+          { merge: true }
+        );
+        console.log("[updateMatchData] Successfully saved");
+      } catch (saveError) {
+        console.error("[updateMatchData] Save error:", saveError);
+      }
 
       console.log(
         `[updateMatchData] Successfully saved matchData for match ${matchNumber}`
