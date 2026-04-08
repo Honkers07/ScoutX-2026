@@ -137,8 +137,8 @@ const TeamMatches = () => {
 
   // Get weight based on data quality color range
   const getQualityWeight = (quality) => {
-    if (!quality || quality < 0.5) return 0.333;  // Red: 33.3%
-    if (quality < 0.75) return 0.666;             // Yellow: 66.6%
+    if (!quality || quality < 0.5) return 0.25;  // Red: 25%
+    if (quality < 0.75) return 0.50;             // Yellow: 50%
     return 1.0;                                   // Green: 100%
   };
 
@@ -558,7 +558,7 @@ const TeamMatches = () => {
         variant="caption"
         sx={{ display: "block", mt: 1, color: "gray" }}
       >
-        * Averages are calculated from the {averageMode === "last5" ? "last 5" : "total"} matches (not removed by user)
+        * Averages are calculated from the {averageMode === "last5" ? "last 5" : "total"} matches (not removed by user) and weighted on data quality
       </Typography>
 
       {matches.length > 0 && (

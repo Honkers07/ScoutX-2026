@@ -328,12 +328,12 @@ export default function VSAllianceTab(props) {
       {/* Official Score Input */}
       <Box sx={{ mb: 3 }}>
         <TextField
-          label="Official Final Score"
+          label="Official Total Fuel Points"
           type="number"
           value={officialScoreInput}
           onChange={handleOfficialScoreChange}
           fullWidth
-          helperText="Enter the official final score from the match results"
+          helperText="Enter the official final fuel points from The Blue Alliance"
           sx={{
             "& .MuiOutlinedInput-root": {
               color: "white",

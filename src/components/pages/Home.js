@@ -17,8 +17,8 @@ export default function Home() {
 
   const handleCalculateFuel = async () => {
     try {
-      // Call calculateFuelScored with a sample match number (e.g., 1)
-      const result = await calculateFuelScored(43);
+      // Call calculateFuelScored with a sample match number and scouterTeam
+      const result = await calculateFuelScored(43, "972");
       console.log("Fuel Calculation Result:", result);
     } catch (error) {
       console.error("Error calculating fuel:", error);

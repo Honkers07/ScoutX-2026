@@ -494,10 +494,12 @@ async function getVideoScoreData(matchNumber) {
   return snap.docs[0].data();
 }
 
-async function getTimerScoutData(matchNumber) {
+async function getTimerScoutData(matchNumber, scouterTeam) {
+  // Query by match and scouterTeam to get all entries from this scouter's team for this match
   const qy = query(
     collection(firebase, "timerScoutData"),
-    where("match", "==", String(matchNumber))
+    where("match", "==", String(matchNumber)),
+    where("scouterTeam", "==", String(scouterTeam))
   );
   const snap = await getDocs(qy);
   return snap.docs.map((d) => d.data());
@@ -1028,27 +1030,26 @@ function getHistoricalDefenseMetric(teamNumber, historicalMatchData) {
 
 // ----------------------------- Main function -----------------------------
 
-export async function calculateFuelScored(matchNumber) {
+export async function calculateFuelScored(matchNumber, scouterTeam) {
   const m = Number(matchNumber);
   if (!Number.isFinite(m))
     throw new Error("calculateFuelScored: matchNumber must be a number");
+  if (!scouterTeam)
+    throw new Error("calculateFuelScored: scouterTeam is required");
 
   const videoScore = await getVideoScoreData(m);
-  const timerDocs = await getTimerScoutData(m);
+  const timerDocs = await getTimerScoutData(m, scouterTeam);
   const fuelDocs = await getFuelScoutData(m);
 
+  // Since we query by scouterTeam, timerDocs contains all teams scouted by this scouter's team
+  // Create a map of team -> doc (should be one per team)
   const timerByTeam = new Map();
   for (const d of timerDocs) {
     const team = Number(d.team ?? d.teamNumber);
     if (!Number.isFinite(team)) continue;
-
+    // Take the first (and should be only) entry for each team
     if (!timerByTeam.has(team)) {
       timerByTeam.set(team, d);
-    } else {
-      const prev = timerByTeam.get(team);
-      const prevTs = Number(prev.timestamp ?? 0);
-      const curTs = Number(d.timestamp ?? 0);
-      if (curTs >= prevTs) timerByTeam.set(team, d);
     }
   }
 

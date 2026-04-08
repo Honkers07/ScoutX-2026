@@ -536,18 +536,24 @@ export async function getSubmittedMatchesFromFirestore() {
     const submittedMatches = {};
     
     querySnapshot.forEach((doc) => {
-      // Document ID is in format: team_match (e.g., "972_13")
+      // Document ID is now in format: team_match_scouterTeam (e.g., "254_12_972")
       const docId = doc.id;
       const data = doc.data();
       
       console.log("Document:", docId, data);
       
-      submittedMatches[docId] = {
+      // Key format: team_match (for backward compatibility check)
+      const key = `${data.team}_${data.match}`;
+      if (!submittedMatches[key]) {
+        submittedMatches[key] = [];
+      }
+      submittedMatches[key].push({
         team: data.team,
         match: data.match,
+        scouterTeam: data.scouterTeam,
         scouter: data.name,
         submittedAt: data.timestamp || null
-      };
+      });
     });
     
     console.log("Submitted matches map:", submittedMatches);
@@ -570,17 +576,20 @@ export async function syncAssignmentsWithSubmittedMatches() {
   // Check each scouter's assignments
   for (const [scouterName, scouterAssignments] of Object.entries(assignments)) {
     scouterAssignments.forEach((assignment, index) => {
-      // Document ID format: team_match (e.g., "972_13")
-      const docId = `${assignment.team}_${assignment.match}`;
-      const submission = submittedMatches[docId];
+      // Key format: team_match (e.g., "972_13")
+      const key = `${assignment.team}_${assignment.match}`;
+      const submissions = submittedMatches[key];
       
       // If there's a submission for this match/team, verify the scouter name matches
-      if (submission && submission.scouter) {
-        // Check if the scouter name matches (case-insensitive)
-        const scouterMatch = submission.scouter.toLowerCase().trim() === scouterName.toLowerCase().trim();
-        if (scouterMatch && !assignment.completed) {
+      if (submissions && Array.isArray(submissions)) {
+        // Find a matching submission by scouter name
+        const matchingSubmission = submissions.find(sub => 
+          sub.scouter && sub.scouter.toLowerCase().trim() === scouterName.toLowerCase().trim()
+        );
+        
+        if (matchingSubmission && !assignment.completed) {
           assignments[scouterName][index].completed = true;
-          assignments[scouterName][index].submittedAt = submission.submittedAt;
+          assignments[scouterName][index].submittedAt = matchingSubmission.submittedAt;
           updated = true;
         }
       }
@@ -596,15 +605,20 @@ export async function syncAssignmentsWithSubmittedMatches() {
 
 /**
  * Check if a specific match has been submitted
+ * Note: This function now checks if any scouter has submitted for the team/match
+ * since multiple scouters can submit for the same team in a match.
  */
 export async function checkMatchSubmitted(teamNumber, matchNumber) {
   try {
-    // Document ID format: team_match (e.g., "972_13")
-    const docId = `${teamNumber}_${matchNumber}`;
-    const docRef = doc(firebase, "timerScoutData", docId);
-    const docSnap = await getDoc(docRef);
+    // Query by match and team to check if any submission exists
+    const q = query(
+      collection(firebase, "timerScoutData"),
+      where("match", "==", String(matchNumber)),
+      where("team", "==", String(teamNumber))
+    );
+    const querySnapshot = await getDocs(q);
     
-    return docSnap.exists();
+    return !querySnapshot.empty;
   } catch (error) {
     console.error("Error checking match submission:", error);
     return false;

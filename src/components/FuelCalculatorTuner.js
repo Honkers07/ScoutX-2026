@@ -16,13 +16,15 @@ import {
 export async function tuneFuelCalculator(
   matchNumber,
   targetRedFuel,
-  targetBlueFuel
+  targetBlueFuel,
+  scouterTeam
 ) {
   const m = Number(matchNumber);
 
   console.log("========================================");
   console.log("FUEL CALCULATOR TUNER");
   console.log("========================================");
+  console.log(`Scouter Team: ${scouterTeam || 'Not provided'}`);
   console.log(`Match Number: ${m}`);
   console.log(`Target Red Fuel: ${targetRedFuel}`);
   console.log(`Target Blue Fuel: ${targetBlueFuel}`);
@@ -43,7 +45,7 @@ export async function tuneFuelCalculator(
 
   // First, test if calculation works at all with default constants
   console.log("Testing default calculation...");
-  const defaultResult = await calculateFuelScored(m);
+  const defaultResult = await calculateFuelScored(m, scouterTeam);
   console.log("Default result:", defaultResult);
 
   if (!defaultResult || defaultResult.length === 0) {
@@ -114,7 +116,7 @@ export async function tuneFuelCalculator(
 
     try {
       // Run calculation with these constants
-      const result = await calculateFuelScored(m);
+      const result = await calculateFuelScored(m, scouterTeam);
 
       if (!result || result.length === 0) {
         skipped++;

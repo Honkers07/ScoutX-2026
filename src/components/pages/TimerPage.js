@@ -106,6 +106,20 @@ function TimerPrematch({ data }) {
       </Grid2>
       <Grid2 xs={12} sm={6}>
         <TextField
+          label="Scouter's Team Number"
+          type="number"
+          variant="outlined"
+          value={data.get(MatchStage.PRE_MATCH, "scouterTeam") || ""}
+          onChange={(e) => {
+            data.set(MatchStage.PRE_MATCH, "scouterTeam", e.target.value);
+            update();
+          }}
+          fullWidth
+          sx={inputStyle}
+        />
+      </Grid2>
+      <Grid2 xs={12} sm={6}>
+        <TextField
           label="Match Number"
           type="number"
           variant="outlined"
@@ -1496,12 +1510,13 @@ export default function TimerPage() {
       const name = data.get(MatchStage.PRE_MATCH, "name");
       const team = data.get(MatchStage.PRE_MATCH, "team");
       const match = data.get(MatchStage.PRE_MATCH, "match");
+      const scouterTeam = data.get(MatchStage.PRE_MATCH, "scouterTeam");
 
-      if (!verificationCode || !name || !team || !match) {
+      if (!verificationCode || !name || !team || !match || !scouterTeam) {
         setAlert({
           open: true,
           message:
-            "Please fill in all required fields: Name, Team Number, Match Number, and Verification Code",
+            "Please fill in all required fields: Name, Team Number, Scouter's Team Number, Match Number, and Verification Code",
           severity: "error",
         });
         return;
@@ -1716,6 +1731,7 @@ export default function TimerPage() {
                   // Submit data to Firebase
                   const team = data.get(MatchStage.PRE_MATCH, "team");
                   const matchNum = data.get(MatchStage.PRE_MATCH, "match");
+                  const scouterTeam = data.get(MatchStage.PRE_MATCH, "scouterTeam");
                   const name = data.get(MatchStage.PRE_MATCH, "name");
                   const verificationCode = data.get(
                     MatchStage.PRE_MATCH,
@@ -1759,10 +1775,11 @@ export default function TimerPage() {
 
                   try {
                     await setDoc(
-                      doc(firebase, "timerScoutData", team + "_" + matchNum),
+                      doc(firebase, "timerScoutData", team + "_" + matchNum + "_" + scouterTeam),
                       {
                         team,
                         match: matchNum,
+                        scouterTeam,
                         name,
                         verificationCode,
                         alliance,
